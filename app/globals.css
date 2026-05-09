@@ -1,26 +1,108 @@
+/* app/globals.css
+   Global styles. Tailwind v4 + custom editor typography.
+   This file is imported by app/layout.tsx (or your group layout) */
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── Base resets ─────────────────────────────────────────── */
+/* Note: Tailwind v4 includes 'preflight' by default with the import above, 
+   so manual box-sizing resets are usually redundant, but safe to keep. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Scrollbar (subtle, warm) ────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Editor prose typography ─────────────────────────────── */
+.editor-content {
+  /* Using CSS variables for the font—ensure Lora is loaded in your layout */
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 18px;
+  line-height: 1.8;
+  color: #1c1917;
+  max-width: 680px;
+  margin: 0 auto;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.editor-content p {
+  margin-bottom: 1.25em;
+}
+
+.editor-content h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 0.75em;
+  margin-top: 1.5em;
+}
+
+.editor-content h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 0.6em;
+  margin-top: 1.25em;
+}
+
+.editor-content blockquote {
+  border-left: 3px solid #d6d3d1;
+  padding-left: 1.25em;
+  color: #78716c;
+  font-style: italic;
+  margin: 1.5em 0;
+}
+
+.editor-content strong {
+  font-weight: 700;
+}
+
+.editor-content em {
+  font-style: italic;
+}
+
+/* ── Wikilink nodes in the editor ────────────────────────── */
+.wikilink {
+  color: #b45309;
+  text-decoration: underline;
+  text-decoration-color: #fcd34d;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.wikilink:hover {
+  color: #92400e;
+}
+
+/* ── TipTap placeholder ──────────────────────────────────── */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #a8a29e;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* ── Focus mode ──────────────────────────────────────────── */
+.focus-mode .editor-content p:not(:focus-within) {
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+.focus-mode .editor-content p:focus-within {
+  opacity: 1;
 }
