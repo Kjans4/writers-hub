@@ -1,7 +1,7 @@
 // app/(app)/project/[projectId]/chapter/[chapterId]/page.tsx
-// Chapter editor page. Loads the document, mounts the Editor component,
-// and wires up save handlers for both content and title.
-// Sets activeDocumentId in Zustand on mount.
+// Updated for Phase 3: passes projectId and branchId to Editor
+// so WikilinkDropdown and HoverCard can query the right branch.
+// Replace your existing chapter page with this file.
 
 'use client'
 
@@ -17,16 +17,13 @@ export default function ChapterPage() {
   const chapterId = params.chapterId as string
   const projectId = params.projectId as string
 
-  const { setActiveDocument } = useEditorStore()
+  const { setActiveDocument, activeBranchId } = useEditorStore()
   const { document, loading, updateDocument } = useDocument(chapterId)
 
-  // Register active document in global store
   useEffect(() => {
     setActiveDocument(chapterId)
     return () => setActiveDocument(null)
   }, [chapterId])
-
-  // ── Save handlers ─────────────────────────────────────────
 
   async function handleSaveContent(content: string) {
     await updateDocument({ content })
@@ -36,7 +33,6 @@ export default function ChapterPage() {
     await updateDocument({ title })
   }
 
-  // ── Loading state ─────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -45,8 +41,7 @@ export default function ChapterPage() {
     )
   }
 
-  // ── Not found ─────────────────────────────────────────────
-  if (!document) {
+  if (!document || !activeBranchId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <p className="text-stone-400 font-['Inter'] text-sm">
@@ -58,8 +53,10 @@ export default function ChapterPage() {
 
   return (
     <Editor
-      key={chapterId} // Force remount on chapter switch
+      key={chapterId}
       documentId={chapterId}
+      projectId={projectId}
+      branchId={activeBranchId}
       initialTitle={document.title}
       initialContent={document.content ?? ''}
       onSaveContent={handleSaveContent}
