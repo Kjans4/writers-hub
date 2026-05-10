@@ -1,9 +1,6 @@
 // app/(app)/project/[projectId]/layout.tsx
-// Three-panel shell for the project workspace.
-// Left panel: chapter + entity tree (collapsible)
-// Center: editor area (always visible)
-// Right panel: entity details / story map (collapsible)
-// Uses Zustand for panel open/close state.
+// Updated for Phase 7: adds BranchDropdown to the top chrome bar.
+// Replace your existing app/(app)/project/[projectId]/layout.tsx with this file.
 
 'use client'
 
@@ -13,7 +10,15 @@ import { useEditorStore } from '@/store/editorStore'
 import LeftPanel from '@/components/layout/LeftPanel'
 import RightPanel from '@/components/layout/RightPanel'
 import SaveIndicator from '@/components/layout/SaveIndicator'
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import BranchDropdown from '@/components/layout/BranchDropdown'
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Home,
+} from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export default function ProjectLayout({
   children,
@@ -22,6 +27,7 @@ export default function ProjectLayout({
 }) {
   const params = useParams()
   const projectId = params.projectId as string
+  const router = useRouter()
 
   const {
     leftPanelOpen,
@@ -31,7 +37,6 @@ export default function ProjectLayout({
     setActiveProject,
   } = useEditorStore()
 
-  // Set active project in global store when layout mounts
   useEffect(() => {
     setActiveProject(projectId)
     return () => setActiveProject(null)
@@ -53,7 +58,7 @@ export default function ProjectLayout({
         </div>
       </aside>
 
-      {/* ── Center: editor + top bar ─────────────────────── */}
+      {/* ── Center ───────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Top chrome bar */}
@@ -70,6 +75,21 @@ export default function ProjectLayout({
               : <PanelLeftOpen size={16} />
             }
           </button>
+
+          {/* Home / dashboard */}
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition-colors"
+            title="Dashboard"
+          >
+            <Home size={15} />
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-4 bg-stone-200" />
+
+          {/* Branch dropdown */}
+          <BranchDropdown projectId={projectId} />
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -96,7 +116,7 @@ export default function ProjectLayout({
         </main>
       </div>
 
-      {/* ── Right panel ─────────────────────────────────── */}
+      {/* ── Right panel ──────────────────────────────────── */}
       <aside
         className={`
           flex-shrink-0 border-l border-stone-200 bg-white

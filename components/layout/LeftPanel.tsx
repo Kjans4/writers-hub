@@ -1,7 +1,7 @@
 // components/layout/LeftPanel.tsx
-// Left sidebar panel showing chapter list and world-building entities.
-// Supports: create chapter, navigate to chapter, navigate to entity pages (Phase 3).
-// Sections: Chapters, Characters, Locations, Lore, Objects.
+// Updated for Phase 7: reacts to activeBranchId changes in the Zustand store.
+// When the user switches branches, the panel reloads documents for the new branch.
+// Replace your existing components/layout/LeftPanel.tsx with this file.
 
 'use client'
 
@@ -28,11 +28,10 @@ interface LeftPanelProps {
   projectId: string
 }
 
-// Section config for world-building entity types
 const ENTITY_SECTIONS: { type: DocumentType; label: string; icon: React.ReactNode }[] = [
   { type: 'character', label: 'Characters', icon: <User size={12} /> },
   { type: 'location',  label: 'Locations',  icon: <MapPin size={12} /> },
-  { type: 'lore',       label: 'Lore',        icon: <Scroll size={12} /> },
+  { type: 'lore',      label: 'Lore',       icon: <Scroll size={12} /> },
   { type: 'object',    label: 'Objects',    icon: <Package size={12} /> },
 ]
 
@@ -46,7 +45,6 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Collapsed state per section
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     chapters: false,
     character: true,
@@ -55,34 +53,40 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
     object: true,
   })
 
-  // Creating state per type
   const [creatingType, setCreatingType] = useState<DocumentType | 'chapter' | null>(null)
   const [newTitle, setNewTitle] = useState('')
 
-  // ── Load canon branch + documents ─────────────────────────
+  // ── Reload documents whenever activeBranchId changes ──────
+  // This is the key Phase 7 update — branch switching reloads the tree
   useEffect(() => {
     async function load() {
-      // Find the canon branch for this project
-      const { data: branch } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('project_id', projectId)
-        .eq('is_canon', true)
-        .single()
+      setLoading(true)
 
-      if (!branch) {
-        setLoading(false)
-        return
+      let branchId = activeBranchId
+
+      // If no active branch, find Canon
+      if (!branchId) {
+        const { data: branch } = await supabase
+          .from('branches')
+          .select('*')
+          .eq('project_id', projectId)
+          .eq('is_canon', true)
+          .single()
+
+        if (!branch) {
+          setLoading(false)
+          return
+        }
+
+        setActiveBranch(branch.id)
+        branchId = branch.id
       }
 
-      setActiveBranch(branch.id)
-
-      // Load all documents for this branch
       const { data: docs } = await supabase
         .from('documents')
         .select('*')
         .eq('project_id', projectId)
-        .eq('branch_id', branch.id)
+        .eq('branch_id', branchId)
         .order('order_index', { ascending: true })
 
       if (docs) setDocuments(docs as Document[])
@@ -90,20 +94,16 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
     }
 
     load()
-  }, [projectId])
+  }, [projectId, activeBranchId]) // re-runs on branch switch
 
-  // ── Toggle section collapsed ───────────────────────────────
   function toggleSection(key: string) {
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // ── Create a new document ──────────────────────────────────
   async function handleCreate(type: DocumentType | 'chapter') {
     if (!newTitle.trim() || !activeBranchId) return
 
     const docType: DocumentType = type === 'chapter' ? 'chapter' : type
-
-    // Get current max order_index for this type
     const sameType = documents.filter((d) => d.type === docType)
     const nextOrder = sameType.length > 0
       ? Math.max(...sameType.map((d) => d.order_index ?? 0)) + 1
@@ -128,7 +128,6 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
     setNewTitle('')
     setCreatingType(null)
 
-    // Navigate to the new document
     if (docType === 'chapter') {
       router.push(`/project/${projectId}/chapter/${doc.id}`)
     } else {
@@ -136,12 +135,10 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
     }
   }
 
-  // ── Is a path active ───────────────────────────────────────
   function isActive(docId: string) {
     return pathname.includes(docId)
   }
 
-  // ── Render a tree item ─────────────────────────────────────
   function renderItem(doc: Document, href: string) {
     return (
       <button
@@ -163,7 +160,6 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
     )
   }
 
-  // ── Render an inline create input ─────────────────────────
   function renderCreateInput(type: DocumentType | 'chapter') {
     return (
       <div className="px-2 py-1">
@@ -197,7 +193,7 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
 
-      {/* ── Panel header ──────────────────────────────── */}
+      {/* Panel header */}
       <div className="px-3 h-11 flex items-center border-b border-stone-100 flex-shrink-0">
         <button
           onClick={() => router.push(`/project/${projectId}`)}
@@ -208,7 +204,7 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
         </button>
       </div>
 
-      {/* ── Scrollable tree ───────────────────────────── */}
+      {/* Scrollable tree */}
       <div className="flex-1 overflow-y-auto py-2 px-2">
         {loading && (
           <div className="flex items-center justify-center py-8">
@@ -218,17 +214,14 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
 
         {!loading && (
           <>
-            {/* ── Chapters section ──────────────────── */}
+            {/* Chapters */}
             <div className="mb-1">
               <div className="flex items-center justify-between px-1 py-1 group">
                 <button
                   onClick={() => toggleSection('chapters')}
                   className="flex items-center gap-1 text-xs font-semibold text-stone-400 uppercase tracking-wider font-['Inter'] hover:text-stone-600 transition-colors"
                 >
-                  {collapsed.chapters
-                    ? <ChevronRight size={11} />
-                    : <ChevronDown size={11} />
-                  }
+                  {collapsed.chapters ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
                   <BookOpen size={11} />
                   Chapters
                 </button>
@@ -259,7 +252,7 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
               )}
             </div>
 
-            {/* ── Entity sections ────────────────────── */}
+            {/* Entity sections */}
             {ENTITY_SECTIONS.map(({ type, label, icon }) => {
               const entities = documents.filter((d) => d.type === type)
               return (
@@ -269,10 +262,7 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
                       onClick={() => toggleSection(type)}
                       className="flex items-center gap-1 text-xs font-semibold text-stone-400 uppercase tracking-wider font-['Inter'] hover:text-stone-600 transition-colors"
                     >
-                      {collapsed[type]
-                        ? <ChevronRight size={11} />
-                        : <ChevronDown size={11} />
-                      }
+                      {collapsed[type] ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
                       {icon}
                       {label}
                     </button>
@@ -308,7 +298,7 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
         )}
       </div>
 
-      {/* ── Story map link ───────────────────────── */}
+      {/* Story map link */}
       <div className="flex-shrink-0 border-t border-stone-100 p-2">
         <button
           onClick={() => router.push(`/project/${projectId}/map`)}
@@ -318,7 +308,6 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
           Story Map
         </button>
       </div>
-
     </div>
   )
 }
