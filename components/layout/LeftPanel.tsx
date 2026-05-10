@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Home,
   Loader2,
+  Map,
 } from 'lucide-react'
 
 interface LeftPanelProps {
@@ -31,7 +32,7 @@ interface LeftPanelProps {
 const ENTITY_SECTIONS: { type: DocumentType; label: string; icon: React.ReactNode }[] = [
   { type: 'character', label: 'Characters', icon: <User size={12} /> },
   { type: 'location',  label: 'Locations',  icon: <MapPin size={12} /> },
-  { type: 'lore',      label: 'Lore',       icon: <Scroll size={12} /> },
+  { type: 'lore',       label: 'Lore',        icon: <Scroll size={12} /> },
   { type: 'object',    label: 'Objects',    icon: <Package size={12} /> },
 ]
 
@@ -306,6 +307,18 @@ export default function LeftPanel({ projectId }: LeftPanelProps) {
           </>
         )}
       </div>
+
+      {/* ── Story map link ───────────────────────── */}
+      <div className="flex-shrink-0 border-t border-stone-100 p-2">
+        <button
+          onClick={() => router.push(`/project/${projectId}/map`)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-['Inter'] text-stone-400 hover:text-stone-600 hover:bg-stone-50 transition-colors"
+        >
+          <Map size={13} />
+          Story Map
+        </button>
+      </div>
+
     </div>
   )
 }

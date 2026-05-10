@@ -67,6 +67,7 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
 
   // ── Notes editor (mini TipTap) ────────────────────────────
   const notesEditor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Write notes about this entity…' }),
