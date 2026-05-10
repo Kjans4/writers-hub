@@ -1,8 +1,6 @@
 // components/editor/Editor.tsx
-// Updated for Phase 6: adds checkpoint modal, timeline strip,
-// keyboard shortcut ⌘⇧S for checkpoint, and restore from checkpoint.
-// Replace your existing components/editor/Editor.tsx with this file.
-
+// Main editor component, mounted at /project/[projectId]/edit.
+// Contains the TipTap editor instance and orchestrates all editing features.
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -21,6 +19,9 @@ import { useSnapshots } from '@/lib/hooks/useSnapshots'
 import { WikilinkExtension } from './extensions/WikilinkExtension'
 import { HoverCardExtension } from './extensions/HoverCardExtension'
 import { ParagraphKeyExtension } from './extensions/ParagraphKeyExtension'
+// ── ADDED IMPORT ──────────────────────────────────────────
+import { InlineAutocompleteExtension } from './extensions/InlineAutocompleteExtension'
+import InlineAutocomplete from './InlineAutocomplete'
 
 import EditorToolbar from './EditorToolbar'
 import EditorHeader from './EditorHeader'
@@ -122,6 +123,11 @@ export default function Editor({
       WikilinkExtension,
       HoverCardExtension,
       ParagraphKeyExtension,
+      // ── ADDED EXTENSION ───────────────────────────────────
+      InlineAutocompleteExtension.configure({
+        projectId,
+        branchId,
+      }),
     ],
     content: initialContent || '',
     editorProps: {
@@ -283,6 +289,9 @@ export default function Editor({
 
       {/* Hover card */}
       <HoverCard projectId={projectId} branchId={branchId} />
+
+      {/* ── ADDED COMPONENT ─────────────────────────────────── */}
+      <InlineAutocomplete editor={editor} />
 
       {/* Chapter title + timeline toggle + checkpoint button */}
       <EditorHeader
