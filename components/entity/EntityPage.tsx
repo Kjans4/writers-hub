@@ -1,9 +1,6 @@
 // components/entity/EntityPage.tsx
-// Full entity detail view — shown in the main editor area when an entity is clicked.
-// Sections: editable title, type badge, quick facts, editable notes (TipTap),
-// "Appears In" (chapters that link to this entity),
-// "Connected To" (other entities this entity links to).
-
+// Page for viewing/editing an entity (character, location, object, or lore).
+// Mounted at /project/[projectId]/entity/[entityId].
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -16,6 +13,7 @@ import { useLinks } from '@/lib/hooks/useLinks'
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { Document, DocumentType } from '@/lib/supabase/types'
 import EntityQuickFacts from './EntityQuickFacts'
+import EntityStates from './EntityStates'
 import { createClient } from '@/lib/supabase/client'
 import {
   User,
@@ -145,7 +143,6 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
           {TYPE_ICONS[document.type]}
         </span>
         <div className="flex-1 min-w-0">
-          {/* Editable title */}
           <input
             type="text"
             defaultValue={document.title}
@@ -169,8 +166,6 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
 
       {/* ── Two-column layout: notes + facts ──────────── */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-8 mb-12">
-
-        {/* Notes */}
         <div>
           <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider font-['Inter'] mb-3">
             Notes
@@ -178,7 +173,6 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
           <EditorContent editor={notesEditor} />
         </div>
 
-        {/* Quick facts */}
         <div>
           <EntityQuickFacts
             facts={facts}
@@ -186,6 +180,17 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
           />
         </div>
       </div>
+
+      {/* ── ADDED ENTITY STATES ─────────────────────────── */}
+      {document && (
+        <div className="mb-12">
+          <EntityStates
+            entityId={entityId}
+            projectId={projectId}
+            branchId={document.branch_id}
+          />
+        </div>
+      )}
 
       {/* ── Appears In ────────────────────────────────── */}
       <div className="mb-8">

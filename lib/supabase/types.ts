@@ -63,6 +63,31 @@ export interface ParagraphVersion {
   created_at: string
 }
 
+export interface MarkLabel {
+  id: string
+  project_id: string
+  name: string
+  color: string          // hex string e.g. "#ef4444"
+  created_at: string
+}
+
+export interface EntityState {
+  id: string
+  entity_id: string
+  branch_id: string
+  chapter_id: string
+  label_id: string
+  note: string | null
+  created_at: string
+  // Joined fields — present when fetched with select('*, mark_labels(*), chapter:documents(*)')
+  mark_labels?: MarkLabel
+  chapter?: {
+    id: string
+    title: string
+    order_index: number | null
+  }
+}
+
 // Supabase Database shape — used when initializing typed clients
 export type Database = {
   public: {
@@ -96,6 +121,16 @@ export type Database = {
         Row: ParagraphVersion
         Insert: Omit<ParagraphVersion, 'id' | 'created_at'>
         Update: Partial<Omit<ParagraphVersion, 'id'>>
+      }
+      mark_labels: {
+        Row: MarkLabel
+        Insert: Omit<MarkLabel, 'id' | 'created_at'>
+        Update: Partial<Omit<MarkLabel, 'id'>>
+      }
+      entity_states: {
+        Row: EntityState
+        Insert: Omit<EntityState, 'id' | 'created_at'>
+        Update: Partial<Omit<EntityState, 'id'>>
       }
     }
   }

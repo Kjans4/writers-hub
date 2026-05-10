@@ -1,7 +1,5 @@
 // app/(app)/project/[projectId]/chapter/[chapterId]/page.tsx
-// Updated for Phase 3: passes projectId and branchId to Editor
-// so WikilinkDropdown and HoverCard can query the right branch.
-// Replace your existing chapter page with this file.
+// Full replacement — adds setActiveDocumentOrderIndex call.
 
 'use client'
 
@@ -17,13 +15,29 @@ export default function ChapterPage() {
   const chapterId = params.chapterId as string
   const projectId = params.projectId as string
 
-  const { setActiveDocument, activeBranchId } = useEditorStore()
+  const {
+    setActiveDocument,
+    setActiveDocumentOrderIndex,   // NEW
+    activeBranchId,
+  } = useEditorStore()
+
   const { document, loading, updateDocument } = useDocument(chapterId)
 
   useEffect(() => {
     setActiveDocument(chapterId)
-    return () => setActiveDocument(null)
+    return () => {
+      setActiveDocument(null)
+      setActiveDocumentOrderIndex(null)   // NEW — clear on unmount
+    }
   }, [chapterId])
+
+  // NEW — write order_index into store once the document has loaded.
+  // This is what Phase C and D will read to filter entity states.
+  useEffect(() => {
+    if (document?.order_index !== undefined) {
+      setActiveDocumentOrderIndex(document.order_index)
+    }
+  }, [document?.order_index])
 
   async function handleSaveContent(content: string) {
     await updateDocument({ content })

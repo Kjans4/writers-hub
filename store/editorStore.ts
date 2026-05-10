@@ -1,6 +1,5 @@
 // store/editorStore.ts
-// Updated for Phase 2: adds focusMode to global state.
-// Replace your existing store/editorStore.ts with this full file.
+// Full replacement — adds activeDocumentOrderIndex field.
 
 import { create } from 'zustand'
 
@@ -9,6 +8,12 @@ interface EditorStore {
   activeProjectId: string | null
   activeBranchId: string | null
   activeDocumentId: string | null
+
+  // NEW — order_index of the currently open chapter document.
+  // null when no chapter is open (e.g. on entity pages or dashboard).
+  // Used by HoverCard (Phase C) and EntityStateDots (Phase D) to
+  // filter entity states to only those that have "happened" yet.
+  activeDocumentOrderIndex: number | null
 
   // Panel visibility
   leftPanelOpen: boolean
@@ -24,6 +29,7 @@ interface EditorStore {
   setActiveProject: (id: string | null) => void
   setActiveBranch: (id: string | null) => void
   setActiveDocument: (id: string | null) => void
+  setActiveDocumentOrderIndex: (index: number | null) => void  // NEW
   toggleLeftPanel: () => void
   toggleRightPanel: () => void
   setSaveStatus: (status: 'idle' | 'saving' | 'saved' | 'error') => void
@@ -36,6 +42,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   activeProjectId: null,
   activeBranchId: null,
   activeDocumentId: null,
+  activeDocumentOrderIndex: null,    // NEW
   leftPanelOpen: true,
   rightPanelOpen: false,
   saveStatus: 'idle',
@@ -45,6 +52,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setActiveProject: (id) => set({ activeProjectId: id }),
   setActiveBranch: (id) => set({ activeBranchId: id }),
   setActiveDocument: (id) => set({ activeDocumentId: id }),
+  setActiveDocumentOrderIndex: (index) =>             // NEW
+    set({ activeDocumentOrderIndex: index }),
   toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
   setSaveStatus: (status) => set({ saveStatus: status }),
