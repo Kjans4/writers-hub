@@ -120,7 +120,10 @@ export default function Editor({
           class: 'text-amber-600 underline underline-offset-2 cursor-pointer',
         },
       }),
-      WikilinkExtension,
+      WikilinkExtension.configure({
+        projectId,
+        branchId,
+      }),
       HoverCardExtension,
       ParagraphKeyExtension,
       // ── ADDED EXTENSION ───────────────────────────────────
