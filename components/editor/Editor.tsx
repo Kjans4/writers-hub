@@ -1,13 +1,11 @@
 // components/editor/Editor.tsx
-// Full replacement for Phase 5.
-// Adds: ParagraphKeyExtension, paragraph sync on autosave,
-// RewriteSurface (modal), CompareView (modal), HistoryDrawer (slide-in),
-// history dot on margin for versioned paragraphs,
-// Wand2 toolbar button now opens RewriteSurface or HistoryDrawer.
+// Updated for Phase 6: adds checkpoint modal, timeline strip,
+// keyboard shortcut ⌘⇧S for checkpoint, and restore from checkpoint.
+// Replace your existing components/editor/Editor.tsx with this file.
 
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Typography from '@tiptap/extension-typography'
@@ -18,6 +16,7 @@ import Heading from '@tiptap/extension-heading'
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { useLinks } from '@/lib/hooks/useLinks'
 import { useParagraphVersions, ParagraphData } from '@/lib/hooks/useParagraphVersions'
+import { useSnapshots } from '@/lib/hooks/useSnapshots'
 
 import { WikilinkExtension } from './extensions/WikilinkExtension'
 import { HoverCardExtension } from './extensions/HoverCardExtension'
@@ -30,6 +29,8 @@ import HoverCard from './HoverCard'
 import RewriteSurface from './RewriteSurface'
 import CompareView from './CompareView'
 import HistoryDrawer from './HistoryDrawer'
+import CheckpointModal from '@/components/timeline/CheckpointModal'
+import TimelineStrip from '@/components/timeline/TimelineStrip'
 
 interface EditorProps {
   documentId: string
@@ -62,10 +63,15 @@ export default function Editor({
   const [compareVersions, setCompareVersions] = useState<{ a: string; b: string } | null>(null)
   const [versionsExist, setVersionsExist] = useState<Set<string>>(new Set())
 
+  // ── Checkpoint state ──────────────────────────────────────
+  const [showCheckpointModal, setShowCheckpointModal] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+
   const { syncLinks } = useLinks()
   const { syncParagraphs, getVersionsForParagraph, saveVersion } = useParagraphVersions()
+  const { createSnapshot } = useSnapshots()
 
-  // ── Extract paragraphs from editor for syncing ────────────
+  // ── Extract paragraphs ────────────────────────────────────
   function extractParagraphs(editor: ReturnType<typeof useEditor>): ParagraphData[] {
     if (!editor) return []
     const paragraphs: ParagraphData[] = []
@@ -80,16 +86,14 @@ export default function Editor({
     return paragraphs
   }
 
-  // ── Get active paragraph key from cursor position ─────────
-  function getActiveParagraphKey(editor: ReturnType<typeof useEditor>): {
+  // ── Get active paragraph from cursor ─────────────────────
+  function getActiveParagraph(editor: ReturnType<typeof useEditor>): {
     key: string | null
     content: string
   } {
     if (!editor) return { key: null, content: '' }
-
     const { from } = editor.state.selection
-    let result: { key: string | null; content: string } = { key: null, content: '' }
-
+    let result = { key: null as string | null, content: '' }
     editor.state.doc.nodesBetween(from, from, (node) => {
       if (node.type.name === 'paragraph') {
         result = {
@@ -98,7 +102,6 @@ export default function Editor({
         }
       }
     })
-
     return result
   }
 
@@ -131,16 +134,36 @@ export default function Editor({
     },
   })
 
-  // ── Wire Rewrite/History button in toolbar ────────────────
-  // EditorToolbar fires a custom event when Wand2 is clicked
+  // ── Keyboard shortcuts ────────────────────────────────────
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey
+
+      // ⌘⇧S — save checkpoint
+      if (mod && e.shiftKey && e.key === 'S') {
+        e.preventDefault()
+        setShowCheckpointModal(true)
+      }
+
+      // ⌘. — toggle focus mode
+      if (mod && e.key === '.') {
+        e.preventDefault()
+        setFocusMode((f) => !f)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // ── Rewrite button event ──────────────────────────────────
   useEffect(() => {
     function handleRewriteClick() {
       if (!editor) return
-      const { key, content } = getActiveParagraphKey(editor)
+      const { key, content } = getActiveParagraph(editor)
       setActiveParagraphKey(key)
-      setActiveParagraphContent(editor.getHTML()) // full HTML for the paragraph
+      setActiveParagraphContent(editor.getHTML())
 
-      // If this paragraph has history, open the drawer instead
       if (key && versionsExist.has(key)) {
         setShowHistory(true)
       } else {
@@ -152,7 +175,7 @@ export default function Editor({
     return () => document.removeEventListener('editor:rewrite', handleRewriteClick)
   }, [editor, versionsExist])
 
-  // ── Sync wikilinks → links table ──────────────────────────
+  // ── Sync wikilinks ────────────────────────────────────────
   useEffect(() => {
     function handleWikilinkUpdate(e: Event) {
       const { titles } = (e as CustomEvent).detail as { titles: string[] }
@@ -167,7 +190,7 @@ export default function Editor({
     return () => document.removeEventListener('wikilink:update', handleWikilinkUpdate)
   }, [projectId, branchId, documentId, syncLinks])
 
-  // ── Reload content when chapter switches ──────────────────
+  // ── Reload on chapter switch ──────────────────────────────
   useEffect(() => {
     if (editor && initialContent !== editor.getHTML()) {
       editor.commands.setContent(initialContent || '')
@@ -183,7 +206,6 @@ export default function Editor({
         const paragraphs = extractParagraphs(editor)
         await syncParagraphs(documentId, paragraphs)
 
-        // Update which paragraph keys have history (for history dot)
         const keysWithHistory = new Set<string>()
         for (const para of paragraphs) {
           const versions = await getVersionsForParagraph(documentId, para.key)
@@ -209,11 +231,9 @@ export default function Editor({
     wrapper.classList.toggle('focus-mode', focusMode)
   }, [focusMode])
 
-  // ── Use a version (from rewrite or history) ───────────────
-  function handleUseVersion(content: string) {
+  // ── Use a version ─────────────────────────────────────────
+  function handleUseVersion(versionContent: string) {
     if (!editor || !activeParagraphKey) return
-
-    // Find and replace the active paragraph
     editor.state.doc.descendants((node, pos) => {
       if (
         node.type.name === 'paragraph' &&
@@ -225,12 +245,31 @@ export default function Editor({
           pos + node.nodeSize,
           editor.schema.nodes.paragraph.create(
             node.attrs,
-            editor.schema.text(content)
+            editor.schema.text(versionContent)
           )
         )
         editor.view.dispatch(tr)
       }
     })
+  }
+
+  // ── Save checkpoint ───────────────────────────────────────
+  async function handleSaveCheckpoint(message: string) {
+    if (!editor) return
+    await createSnapshot({
+      documentId,
+      branchId,
+      content: editor.getHTML(),
+      message,
+    })
+  }
+
+  // ── Restore from checkpoint ───────────────────────────────
+  function handleRestoreCheckpoint(restoredContent: string) {
+    if (!editor) return
+    editor.commands.setContent(restoredContent)
+    setContent(restoredContent)
+    setShowTimeline(false)
   }
 
   return (
@@ -245,27 +284,42 @@ export default function Editor({
       {/* Hover card */}
       <HoverCard projectId={projectId} branchId={branchId} />
 
-      {/* Chapter title */}
+      {/* Chapter title + timeline toggle + checkpoint button */}
       <EditorHeader
         title={initialTitle}
         onTitleChange={onSaveTitle}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((f) => !f)}
+        onOpenCheckpoint={() => setShowCheckpointModal(true)}
+        onToggleTimeline={() => setShowTimeline((t) => !t)}
+        timelineOpen={showTimeline}
       />
 
+      {/* Timeline strip — shown below title when toggled */}
+      {showTimeline && (
+        <TimelineStrip
+          documentId={documentId}
+          branchId={branchId}
+          currentContent={content}
+          onRestore={handleRestoreCheckpoint}
+          onClose={() => setShowTimeline(false)}
+        />
+      )}
+
       {/* Editor content */}
-      <div className="relative">
-        <EditorContent editor={editor} />
+      <EditorContent editor={editor} />
 
-        {/* History dots — appear in margin for paragraphs with history */}
-        {editor && Array.from(versionsExist).map((key) => {
-          // We render a dot outside the editor; position is approximate
-          // Full pixel-perfect positioning requires ProseMirror DOM traversal (Phase 5 polish)
-          return null // placeholder — see note below
-        })}
-      </div>
+      {/* ── Modals ─────────────────────────────────────────── */}
 
-      {/* Rewrite surface modal */}
+      {/* Checkpoint modal */}
+      {showCheckpointModal && (
+        <CheckpointModal
+          onSave={handleSaveCheckpoint}
+          onClose={() => setShowCheckpointModal(false)}
+        />
+      )}
+
+      {/* Rewrite surface */}
       {showRewrite && editor && (
         <RewriteSurface
           editor={editor}
@@ -282,7 +336,7 @@ export default function Editor({
         />
       )}
 
-      {/* Compare view modal */}
+      {/* Compare view */}
       {showCompare && compareVersions && (
         <CompareView
           versionA={compareVersions.a}
