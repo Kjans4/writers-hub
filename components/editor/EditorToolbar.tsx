@@ -1,21 +1,13 @@
 // components/editor/EditorToolbar.tsx
-// Floating toolbar that appears on text selection.
-// Buttons: Bold, Italic, Heading 1, Heading 2, Blockquote.
-// Positioned above the selection using getBoundingClientRect.
-// "Rewrite" button is a stub — will be wired up in Phase 5 (paragraph versioning).
+// Updated for Phase 5: Wand2 button now fires "editor:rewrite" DOM event
+// instead of being a no-op stub. Editor.tsx listens for this event.
+// Replace your existing components/editor/EditorToolbar.tsx with this file.
 
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Editor } from '@tiptap/react'
-import {
-  Bold,
-  Italic,
-  Heading1,
-  Heading2,
-  Quote,
-  Wand2,
-} from 'lucide-react'
+import { Bold, Italic, Heading1, Heading2, Quote, Wand2 } from 'lucide-react'
 
 interface EditorToolbarProps {
   editor: Editor | null
@@ -42,7 +34,6 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
       return
     }
 
-    // Get the bounding rect of the selection
     const domSelection = window.getSelection()
     if (!domSelection || domSelection.rangeCount === 0) {
       setVisible(false)
@@ -61,7 +52,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
     const scrollY = window.scrollY
 
     setPosition({
-      top: rect.top + scrollY - 44, // 44px above selection
+      top: rect.top + scrollY - 44,
       left: Math.max(
         8,
         Math.min(
@@ -75,10 +66,8 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
   useEffect(() => {
     if (!editor) return
-
     editor.on('selectionUpdate', updatePosition)
     editor.on('blur', () => setVisible(false))
-
     return () => {
       editor.off('selectionUpdate', updatePosition)
       editor.off('blur', () => setVisible(false))
@@ -87,35 +76,26 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
   if (!editor || !visible) return null
 
-  const btnBase =
-    'p-1.5 rounded transition-colors text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+  const btnBase = 'p-1.5 rounded transition-colors text-stone-500 hover:text-stone-800 hover:bg-stone-100'
   const btnActive = 'bg-stone-100 text-stone-800'
 
   return (
     <div
       ref={toolbarRef}
-      onMouseDown={(e) => e.preventDefault()} // Don't steal focus
+      onMouseDown={(e) => e.preventDefault()}
       style={{ top: position.top, left: position.left }}
       className="fixed z-50 flex items-center gap-0.5 bg-white border border-stone-200 rounded-lg shadow-lg px-1.5 py-1 select-none"
     >
-      {/* Bold */}
       <button
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleBold().run()
-        }}
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run() }}
         className={`${btnBase} ${editor.isActive('bold') ? btnActive : ''}`}
         title="Bold (⌘B)"
       >
         <Bold size={14} />
       </button>
 
-      {/* Italic */}
       <button
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleItalic().run()
-        }}
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run() }}
         className={`${btnBase} ${editor.isActive('italic') ? btnActive : ''}`}
         title="Italic (⌘I)"
       >
@@ -124,36 +104,24 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
       <div className="w-px h-4 bg-stone-200 mx-0.5" />
 
-      {/* H1 */}
       <button
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleHeading({ level: 1 }).run()
-        }}
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 1 }).run() }}
         className={`${btnBase} ${editor.isActive('heading', { level: 1 }) ? btnActive : ''}`}
         title="Heading 1"
       >
         <Heading1 size={14} />
       </button>
 
-      {/* H2 */}
       <button
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleHeading({ level: 2 }).run()
-        }}
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 2 }).run() }}
         className={`${btnBase} ${editor.isActive('heading', { level: 2 }) ? btnActive : ''}`}
         title="Heading 2"
       >
         <Heading2 size={14} />
       </button>
 
-      {/* Blockquote */}
       <button
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleBlockquote().run()
-        }}
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() }}
         className={`${btnBase} ${editor.isActive('blockquote') ? btnActive : ''}`}
         title="Blockquote"
       >
@@ -162,14 +130,14 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
       <div className="w-px h-4 bg-stone-200 mx-0.5" />
 
-      {/* Rewrite — stub for Phase 5 */}
+      {/* Rewrite — now fires editor:rewrite event */}
       <button
         onMouseDown={(e) => {
           e.preventDefault()
-          // Phase 5: will open the rewrite / paragraph versioning surface
+          document.dispatchEvent(new CustomEvent('editor:rewrite', { bubbles: true }))
         }}
         className={`${btnBase} text-amber-500 hover:text-amber-700 hover:bg-amber-50`}
-        title="Rewrite (Phase 5)"
+        title="Rewrite paragraph"
       >
         <Wand2 size={14} />
       </button>

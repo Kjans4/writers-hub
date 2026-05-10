@@ -25,6 +25,7 @@
     "react-dom": "^19.2.6",
     "react-force-graph": "^1.48.2",
     "react-force-graph-2d": "^1.29.1",
+    "uuid": "^14.0.0",
     "zustand": "^5.0.13"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
