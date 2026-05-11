@@ -1,12 +1,15 @@
-// component/editor/HoverCard.tsx
+// components/editor/HoverCard.tsx
+// Hover card shown 400ms after hovering a wikilink node.
+// Listens to "wikilink:hover" and "wikilink:hoverout" DOM events.
+// Fetches entity metadata from Supabase and displays Quick Facts.
+// Never blocks the current writing line — always appears above the wikilink.
+
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useEntityStates } from '@/lib/hooks/useEntityStates'
-import { useEditorStore } from '@/store/editorStore'
-import { Document, DocumentType, EntityState } from '@/lib/supabase/types'
+import { Document, DocumentType } from '@/lib/supabase/types'
 import { User, MapPin, Scroll, Package, ExternalLink, Loader2 } from 'lucide-react'
 
 interface HoverCardProps {
@@ -33,20 +36,17 @@ const TYPE_COLORS: Record<DocumentType, string> = {
 export default function HoverCard({ projectId, branchId }: HoverCardProps) {
   const router = useRouter()
   const supabase = createClient()
-  const { getActiveStatesForEntity } = useEntityStates()
 
-  const { activeDocumentOrderIndex } = useEditorStore()
-
-  const [entity, setEntity]   = useState<Document | null>(null)
-  const [states, setStates]   = useState<EntityState[]>([])
+  const [entity, setEntity] = useState<Document | null>(null)
   const [loading, setLoading] = useState(false)
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
 
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cardRef      = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
+  // ── Listen for hover events ───────────────────────────────
   useEffect(() => {
     async function handleHover(e: Event) {
       const { title, rect } = (e as CustomEvent).detail as {
@@ -54,21 +54,26 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
         rect: DOMRect
       }
 
+      // Clear any pending hide
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
 
+      // Show after 400ms delay
       showTimerRef.current = setTimeout(async () => {
         setLoading(true)
         setVisible(true)
 
+        // Position: above the wikilink, left-aligned
         const cardWidth = 260
         const scrollY = window.scrollY
         setPosition({
-          top:  rect.top + scrollY - 8,
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - cardWidth - 8)),
+          top: rect.top + scrollY - 8,
+          left: Math.max(
+            8,
+            Math.min(rect.left, window.innerWidth - cardWidth - 8)
+          ),
         })
 
-        // ── UPDATED FETCH LOGIC ────────────────────────────────
-        // Fetch entity first
+        // Fetch entity
         const { data } = await supabase
           .from('documents')
           .select('*')
@@ -77,24 +82,10 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
           .eq('title', title)
           .single()
 
-        const entityData = data as Document | null
-        setEntity(entityData)
-
-        // Then fetch active states with the real entity id
-        if (entityData) {
-          const activeStates = await getActiveStatesForEntity(
-            entityData.id,
-            branchId,
-            activeDocumentOrderIndex ?? Infinity
-          )
-          setStates(activeStates)
-        } else {
-          setStates([])
-        }
-
+        setEntity(data as Document | null)
         setLoading(false)
-        // ──────────────────────────────────────────────────────
 
+        // Reposition above after we know card height
         setTimeout(() => {
           if (cardRef.current) {
             const cardHeight = cardRef.current.offsetHeight
@@ -109,21 +100,24 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
 
     function handleHoverOut() {
       if (showTimerRef.current) clearTimeout(showTimerRef.current)
+
+      // Small grace period — lets mouse move to the card itself
       hideTimerRef.current = setTimeout(() => {
         setVisible(false)
         setEntity(null)
-        setStates([])
       }, 200)
     }
 
     document.addEventListener('wikilink:hover', handleHover)
     document.addEventListener('wikilink:hoverout', handleHoverOut)
+
     return () => {
       document.removeEventListener('wikilink:hover', handleHover)
       document.removeEventListener('wikilink:hoverout', handleHoverOut)
     }
-  }, [projectId, branchId, activeDocumentOrderIndex, getActiveStatesForEntity, supabase])
+  }, [projectId, branchId])
 
+  // ── Keep card visible while mouse is over it ──────────────
   function handleCardMouseEnter() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
   }
@@ -132,14 +126,17 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
     hideTimerRef.current = setTimeout(() => {
       setVisible(false)
       setEntity(null)
-      setStates([])
     }, 150)
   }
 
   if (!visible) return null
 
-  const quickFacts = (entity?.metadata as Record<string, string> | null) ?? {}
-  const colorClass = entity ? TYPE_COLORS[entity.type] : 'text-stone-400 bg-stone-50'
+  // Parse quick facts from metadata
+  const quickFacts: Record<string, string> =
+    (entity?.metadata as Record<string, string> | null) ?? {}
+
+  const colorClass =
+    entity ? TYPE_COLORS[entity.type] : 'text-stone-400 bg-stone-50'
 
   return (
     <div
@@ -157,7 +154,9 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
 
       {!loading && !entity && (
         <div className="px-4 py-3">
-          <p className="text-xs text-stone-400 font-['Inter']">Entity not found</p>
+          <p className="text-xs text-stone-400 font-['Inter']">
+            Entity not found
+          </p>
         </div>
       )}
 
@@ -178,9 +177,16 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
                 </p>
               </div>
             </div>
+
+            {/* Navigate to entity page */}
             <button
-              onClick={() => router.push(`/project/${projectId}/entity/${entity.id}`)}
-              className="p-1 text-stone-300 hover:text-stone-500 transition-colors flex-shrink-0 mt-0.5"
+              onClick={() =>
+                router.push(
+                  `/project/${projectId}/entity/${entity.id}`
+                )
+              }
+              className="p-1 text-stone-300 hover:text-stone-500 transition-colors shrink-0 mt-0.5"
+              title="Open entity page"
             >
               <ExternalLink size={12} />
             </button>
@@ -188,52 +194,27 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
 
           {/* Quick facts */}
           {Object.keys(quickFacts).length > 0 && (
-            <div className="px-4 pb-2 border-t border-stone-100 pt-2 space-y-1">
-              {Object.entries(quickFacts).slice(0, 4).map(([key, value]) => (
-                <div key={key} className="flex gap-2">
-                  <span className="text-xs text-stone-400 font-['Inter'] w-20 flex-shrink-0 capitalize">
-                    {key}
-                  </span>
-                  <span className="text-xs text-stone-600 font-['Inter'] truncate">
-                    {String(value)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* States section */}
-          {states.length > 0 && (
-            <div className="px-4 pb-3 border-t border-stone-100 pt-2 space-y-1.5">
-              {states.map((state) => (
-                <div key={state.id} className="flex items-start gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0 mt-1"
-                    style={{ background: state.mark_labels?.color ?? '#a8a29e' }}
-                  />
-                  <div className="min-w-0">
-                    <span
-                      className="text-xs font-medium font-['Inter'] capitalize"
-                      style={{ color: state.mark_labels?.color ?? '#a8a29e' }}
-                    >
-                      {state.mark_labels?.name ?? 'Unknown'}
+            <div className="px-4 pb-3 border-t border-stone-100 pt-2 space-y-1">
+              {Object.entries(quickFacts)
+                .slice(0, 4)
+                .map(([key, value]) => (
+                  <div key={key} className="flex gap-2">
+                    <span className="text-xs text-stone-400 font-['Inter'] w-20 shrink-0 capitalize">
+                      {key}
                     </span>
-                    {state.note && (
-                      <p className="text-xs text-stone-400 font-['Inter'] truncate">
-                        {state.note}
-                      </p>
-                    )}
+                    <span className="text-xs text-stone-600 font-['Inter'] truncate">
+                      {String(value)}
+                    </span>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
 
-          {/* Fallback */}
-          {Object.keys(quickFacts).length === 0 && states.length === 0 && (
+          {/* No quick facts yet */}
+          {Object.keys(quickFacts).length === 0 && (
             <div className="px-4 pb-3 border-t border-stone-100 pt-2">
               <p className="text-xs text-stone-300 font-['Inter']">
-                No quick facts yet.
+                No quick facts yet — add them on the entity page.
               </p>
             </div>
           )}

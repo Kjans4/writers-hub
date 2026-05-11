@@ -1,8 +1,15 @@
 // lib/supabase/types.ts
 // All database types for Writer's Hub.
-// Manually maintained for the prototype. In production, generate via: npx supabase gen types typescript
+// Updated for Chunk 1: adds Profile, PublishedStory, Follow,
+// ReadingProgress, CompletedChapter types.
+// Also adds is_published / published_at to Document.
 
 export type DocumentType = 'chapter' | 'character' | 'location' | 'lore' | 'object'
+
+export type ContentRating = 'all_ages' | 'teen' | 'mature'
+export type StoryStatus   = 'ongoing' | 'completed' | 'hiatus'
+
+// ── Existing tables ───────────────────────────────────────────
 
 export interface Project {
   id: string
@@ -32,6 +39,9 @@ export interface Document {
   content: string | null
   metadata: Record<string, unknown> | null
   order_index: number | null
+  // Chunk 1 additions
+  is_published: boolean
+  published_at: string | null
   created_at: string
   updated_at: string
 }
@@ -63,32 +73,104 @@ export interface ParagraphVersion {
   created_at: string
 }
 
-export interface MarkLabel {
+// ── Chunk 1 new tables ────────────────────────────────────────
+
+export interface Profile {
+  id: string              // matches auth.users.id
+  username: string | null
+  display_name: string | null
+  bio: string | null
+  avatar_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PublishedStory {
   id: string
   project_id: string
-  name: string
-  color: string          // hex string e.g. "#ef4444"
+  user_id: string
+  slug: string
+  title: string
+  hook: string | null
+  description: string | null
+  cover_url: string | null
+  content_rating: ContentRating
+  status: StoryStatus
+  is_published: boolean
+  published_at: string
+  updated_at: string
+}
+
+export interface Follow {
+  id: string
+  follower_id: string
+  following_id: string
   created_at: string
 }
 
-export interface EntityState {
+export interface ReadingProgress {
   id: string
-  entity_id: string
-  branch_id: string
-  chapter_id: string
-  label_id: string
-  note: string | null
-  created_at: string
-  // Joined fields — present when fetched with select('*, mark_labels(*), chapter:documents(*)')
-  mark_labels?: MarkLabel
-  chapter?: {
-    id: string
-    title: string
-    order_index: number | null
+  user_id: string
+  published_story_id: string
+  current_document_id: string | null   // null → start from chapter 1
+  last_read_at: string
+}
+
+export interface CompletedChapter {
+  id: string
+  user_id: string
+  document_id: string
+  completed_at: string
+}
+
+// ── Convenience types for API responses ──────────────────────
+
+// Published chapter as returned by the chapter-list API
+export interface PublishedChapter {
+  document_id: string
+  position: number       // 1-based, computed server-side from order_index sort
+  title: string
+  published_at: string
+}
+
+// Single chapter with full content for the reading page
+export interface ChapterWithContent extends PublishedChapter {
+  content: string        // raw TipTap HTML — rendered with prose-reading CSS
+}
+
+// Story card shape used in home feed and author profile
+export interface StoryCard {
+  id: string
+  slug: string
+  title: string
+  hook: string | null
+  cover_url: string | null
+  content_rating: ContentRating
+  status: StoryStatus
+  published_chapter_count: number
+  author: {
+    username: string | null
+    display_name: string | null
+    avatar_url: string | null
   }
 }
 
-// Supabase Database shape — used when initializing typed clients
+// Continue Reading item used in home feed
+export interface ContinueReadingItem {
+  published_story_id: string
+  slug: string
+  title: string
+  cover_url: string | null
+  current_document_id: string | null
+  resume_position: number     // 1-based chapter position to resume at
+  resume_chapter_title: string
+  chapters_completed: number
+  total_published: number
+  last_read_at: string
+}
+
+// ── Supabase Database shape ───────────────────────────────────
+
 export type Database = {
   public: {
     Tables: {
@@ -122,15 +204,30 @@ export type Database = {
         Insert: Omit<ParagraphVersion, 'id' | 'created_at'>
         Update: Partial<Omit<ParagraphVersion, 'id'>>
       }
-      mark_labels: {
-        Row: MarkLabel
-        Insert: Omit<MarkLabel, 'id' | 'created_at'>
-        Update: Partial<Omit<MarkLabel, 'id'>>
+      profiles: {
+        Row: Profile
+        Insert: Omit<Profile, 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Profile, 'id'>>
       }
-      entity_states: {
-        Row: EntityState
-        Insert: Omit<EntityState, 'id' | 'created_at'>
-        Update: Partial<Omit<EntityState, 'id'>>
+      published_stories: {
+        Row: PublishedStory
+        Insert: Omit<PublishedStory, 'id' | 'published_at' | 'updated_at'>
+        Update: Partial<Omit<PublishedStory, 'id' | 'published_at'>>
+      }
+      follows: {
+        Row: Follow
+        Insert: Omit<Follow, 'id' | 'created_at'>
+        Update: never
+      }
+      reading_progress: {
+        Row: ReadingProgress
+        Insert: Omit<ReadingProgress, 'id'>
+        Update: Partial<Omit<ReadingProgress, 'id' | 'user_id' | 'published_story_id'>>
+      }
+      completed_chapters: {
+        Row: CompletedChapter
+        Insert: Omit<CompletedChapter, 'id' | 'completed_at'>
+        Update: never
       }
     }
   }

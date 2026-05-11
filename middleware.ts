@@ -1,10 +1,25 @@
 // middleware.ts
-// Place at the ROOT of your project (same level as package.json).
-// Guards all routes: redirects unauthenticated users to /login,
-// redirects authenticated users away from auth pages.
+// Updated for Chunk 1: whitelists public reader routes so unauthenticated
+// users can browse stories, author profiles, and the home feed.
+// Auth-required routes (dashboard, project editor, progress API) still
+// redirect to /login when no session exists.
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+
+// Routes accessible without a login session.
+// Prefix matching — any path that starts with one of these is public.
+const PUBLIC_PREFIXES = [
+  '/story/',
+  '/author/',
+  '/home',
+  '/login',
+  '/signup',
+]
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -34,19 +49,19 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isAuthRoute =
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/signup')
+  const { pathname } = request.nextUrl
+  const isAuth   = pathname.startsWith('/login') || pathname.startsWith('/signup')
+  const isPublic = isPublicPath(pathname)
 
-  // Not logged in and trying to access protected route → send to login
-  if (!user && !isAuthRoute) {
+  // Not logged in, trying to access a protected route → send to login
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Logged in and hitting auth pages → send to dashboard
-  if (user && isAuthRoute) {
+  // Logged in, hitting an auth page → send to dashboard
+  if (user && isAuth) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
@@ -57,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all routes except Next.js internals and static files
+    // Match everything except Next.js internals and static assets
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
