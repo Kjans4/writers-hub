@@ -96,7 +96,7 @@ export default function LoginPage() {
 
         <p className="text-center text-stone-400 text-sm mt-6 font-['Inter']">
           No account?{' '}
-          <Link
+          <Link 
             href="/signup"
             className="text-stone-600 hover:text-stone-800 underline underline-offset-2 transition-colors"
           >
