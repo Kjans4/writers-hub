@@ -1,6 +1,6 @@
-// app/(app)/project/[projectId]/layout.tsx
+// app/(app)/project/[slug]/layout.tsx
 // Updated for Phase 7: adds BranchDropdown to the top chrome bar.
-// Replace your existing app/(app)/project/[projectId]/layout.tsx with this file.
+// Replace your existing app/(app)/project/[slug]/layout.tsx with this file.
 
 'use client'
 
@@ -26,7 +26,7 @@ export default function ProjectLayout({
   children: React.ReactNode
 }) {
   const params = useParams()
-  const projectId = params.projectId as string
+  const slug = params.slug as string
   const router = useRouter()
 
   const {
@@ -38,9 +38,9 @@ export default function ProjectLayout({
   } = useEditorStore()
 
   useEffect(() => {
-    setActiveProject(projectId)
+    setActiveProject(slug)
     return () => setActiveProject(null)
-  }, [projectId])
+  }, [slug])
 
   return (
     <div className="flex h-screen bg-[#faf9f7] overflow-hidden">
@@ -54,7 +54,7 @@ export default function ProjectLayout({
         `}
       >
         <div className="w-60 h-full">
-          <LeftPanel projectId={projectId} />
+          <LeftPanel projectId={slug} />
         </div>
       </aside>
 
@@ -89,7 +89,7 @@ export default function ProjectLayout({
           <div className="w-px h-4 bg-stone-200" />
 
           {/* Branch dropdown */}
-          <BranchDropdown projectId={projectId} />
+          <BranchDropdown slug={slug} />
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -125,7 +125,7 @@ export default function ProjectLayout({
         `}
       >
         <div className="w-72 h-full">
-          <RightPanel projectId={projectId} />
+          <RightPanel projectId={slug} />
         </div>
       </aside>
 

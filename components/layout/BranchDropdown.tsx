@@ -24,10 +24,10 @@ import {
 } from 'lucide-react'
 
 interface BranchDropdownProps {
-  projectId: string
+  slug: string
 }
 
-export default function BranchDropdown({ projectId }: BranchDropdownProps) {
+export default function BranchDropdown({ slug }: BranchDropdownProps) {
   const router = useRouter()
   const { activeBranchId, setActiveBranch } = useEditorStore()
   const { getBranches, createBranch, setAsCanon, deleteBranch } = useBranch()
@@ -48,7 +48,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const data = await getBranches(projectId)
+      const data = await getBranches(slug)
       setBranches(data)
 
       // If no active branch set, default to Canon
@@ -60,7 +60,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
       setLoading(false)
     }
     load()
-  }, [projectId])
+  }, [slug])
 
   // ── Close on outside click ────────────────────────────────
   useEffect(() => {
@@ -81,7 +81,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
     setActiveBranch(branch.id)
     setOpen(false)
     // Navigate to project root — LeftPanel will reload with new branch
-    router.push(`/project/${projectId}`)
+    router.push(`/project/${slug}`)
   }
 
   // ── Fork new branch ───────────────────────────────────────
@@ -89,7 +89,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
     if (!canonBranch) return
 
     const newBranch = await createBranch({
-      projectId,
+      projectId: slug,
       canonBranchId: canonBranch.id,
       name,
     })
@@ -97,14 +97,14 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
     if (newBranch) {
       setBranches((prev) => [...prev, newBranch])
       setActiveBranch(newBranch.id)
-      router.push(`/project/${projectId}`)
+      router.push(`/project/${slug}`)
     }
   }
 
   // ── Set as Canon ──────────────────────────────────────────
   async function handleSetCanon(branchId: string) {
     setSettingCanon(branchId)
-    const success = await setAsCanon({ projectId, newCanonBranchId: branchId })
+    const success = await setAsCanon({ projectId: slug, newCanonBranchId: branchId })
     if (success) {
       setBranches((prev) =>
         prev.map((b) => ({
@@ -124,7 +124,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
       // If deleted branch was active, switch to Canon
       if (activeBranchId === branchId && canonBranch) {
         setActiveBranch(canonBranch.id)
-        router.push(`/project/${projectId}`)
+        router.push(`/project/${slug}`)
       }
     }
     setDeletingId(null)

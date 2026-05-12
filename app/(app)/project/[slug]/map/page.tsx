@@ -1,4 +1,4 @@
-// app/(app)/project/[projectId]/map/page.tsx
+// app/(app)/project/[slug]/map/page.tsx
 // Full-screen story map page. Accessible via /project/[id]/map.
 // Useful for an immersive map view outside the three-panel layout.
 // The left panel link to this page will be added in a later polish pass.
@@ -13,7 +13,7 @@ import { ArrowLeft } from 'lucide-react'
 export default function MapPage() {
   const params = useParams()
   const router = useRouter()
-  const projectId = params.projectId as string
+  const slug = params.slug as string
 
   return (
     <div className="relative w-full h-full min-h-screen">
@@ -26,7 +26,7 @@ export default function MapPage() {
         Back
       </button>
 
-      <StoryMap projectId={projectId} />
+      <StoryMap projectId={slug} />
     </div>
   )
 }

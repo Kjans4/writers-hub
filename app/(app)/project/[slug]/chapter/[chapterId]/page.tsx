@@ -1,4 +1,4 @@
-// app/(app)/project/[projectId]/chapter/[chapterId]/page.tsx
+// app/(app)/project/[slug]/chapter/[chapterId]/page.tsx
 // Full replacement — adds setActiveDocumentOrderIndex call.
 
 'use client'
@@ -13,7 +13,7 @@ import { Loader2 } from 'lucide-react'
 export default function ChapterPage() {
   const params = useParams()
   const chapterId = params.chapterId as string
-  const projectId = params.projectId as string
+  const slug = params.slug as string
 
   const {
     setActiveDocument,
@@ -69,7 +69,7 @@ export default function ChapterPage() {
     <Editor
       key={chapterId}
       documentId={chapterId}
-      projectId={projectId}
+      projectId={slug}
       branchId={activeBranchId}
       initialTitle={document.title}
       initialContent={document.content ?? ''}

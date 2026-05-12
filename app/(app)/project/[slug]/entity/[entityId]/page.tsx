@@ -1,4 +1,4 @@
-// app/(app)/project/[projectId]/entity/[entityId]/page.tsx
+// app/(app)/project/[slug]/entity/[entityId]/page.tsx
 // Entity page route. Renders EntityPage component in the main editor area.
 // Sets activeDocumentId in Zustand on mount.
 
@@ -12,7 +12,7 @@ import EntityPage from '@/components/entity/EntityPage'
 export default function EntityRoute() {
   const params = useParams()
   const entityId = params.entityId as string
-  const projectId = params.projectId as string
+  const slug = params.slug as string
 
   const { setActiveDocument } = useEditorStore()
 
@@ -21,5 +21,5 @@ export default function EntityRoute() {
     return () => setActiveDocument(null)
   }, [entityId])
 
-  return <EntityPage entityId={entityId} projectId={projectId} />
+  return <EntityPage entityId={entityId} projectId={slug} />
 }

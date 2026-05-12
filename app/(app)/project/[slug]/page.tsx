@@ -1,4 +1,4 @@
-// app/(app)/project/[projectId]/page.tsx
+// app/(app)/project/[slug]/page.tsx
 // Project index page — shown when no chapter is selected.
 // Displays a welcome/empty state with a prompt to create the first chapter.
 // Will be replaced by the editor in Phase 2 once a chapter is opened.

@@ -208,7 +208,7 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
               <button
                 key={doc.id}
                 onClick={() =>
-                  router.push(`/project/${projectId}/chapter/${doc.id}`)
+                  router.push(`/project/${slug}/chapter/${doc.id}`)
                 }
                 className="flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 font-['Inter'] transition-colors group"
               >
@@ -239,7 +239,7 @@ export default function EntityPage({ entityId, projectId }: EntityPageProps) {
               <button
                 key={doc.id}
                 onClick={() =>
-                  router.push(`/project/${projectId}/entity/${doc.id}`)
+                  router.push(`/project/${slug}/entity/${doc.id}`)
                 }
                 className={`
                   flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs
