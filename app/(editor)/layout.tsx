@@ -1,7 +1,7 @@
 // app/(editor)/layout.tsx
-// Layout for the editor shell: project pages, chapter editor, entity pages.
-// Auth check only — the editor has its own full-screen chrome (top bar,
-// left panel, right panel). The global reader nav does NOT appear here.
+// Auth guard for all editor routes (writing tool).
+// Previously lived at app/(app)/layout.tsx.
+// No logic changes — folder rename only.
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -12,7 +12,10 @@ export default async function EditorLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     redirect('/login')
