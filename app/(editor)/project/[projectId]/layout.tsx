@@ -1,6 +1,10 @@
-// app/(app)/project/[projectId]/layout.tsx
-// Updated for Phase 7: adds BranchDropdown to the top chrome bar.
-// Replace your existing app/(app)/project/[projectId]/layout.tsx with this file.
+// app/(editor)/project/[projectId]/layout.tsx
+// Three-panel writing tool layout.
+// Previously lived at app/(app)/project/[projectId]/layout.tsx —
+// moved to app/(editor)/ to resolve the [projectId] vs [slug] route
+// collision that Next.js 15+ rejects at build time.
+//
+// NOTHING in this file changed except its folder location.
 
 'use client'
 
@@ -26,7 +30,7 @@ export default function ProjectLayout({
   children: React.ReactNode
 }) {
   const params = useParams()
-  const slug = params.slug as string
+  const projectId = params.projectId as string
   const router = useRouter()
 
   const {
@@ -38,9 +42,9 @@ export default function ProjectLayout({
   } = useEditorStore()
 
   useEffect(() => {
-    setActiveProject(slug)
+    setActiveProject(projectId)
     return () => setActiveProject(null)
-  }, [slug])
+  }, [projectId])
 
   return (
     <div className="flex h-screen bg-[#faf9f7] overflow-hidden">
@@ -54,7 +58,7 @@ export default function ProjectLayout({
         `}
       >
         <div className="w-60 h-full">
-          <LeftPanel projectId={slug} />
+          <LeftPanel projectId={projectId} />
         </div>
       </aside>
 
@@ -89,7 +93,7 @@ export default function ProjectLayout({
           <div className="w-px h-4 bg-stone-200" />
 
           {/* Branch dropdown */}
-          <BranchDropdown projectId={slug} />
+          <BranchDropdown projectId={projectId} />
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -125,7 +129,7 @@ export default function ProjectLayout({
         `}
       >
         <div className="w-72 h-full">
-          <RightPanel projectId={slug} />
+          <RightPanel projectId={projectId} />
         </div>
       </aside>
 
