@@ -1,35 +1,31 @@
 // components/publish/ManagePublishing.tsx
-// Shown when a project already has a published story.
-// Lets the writer manage chapter publish/unpublish, story status,
-// copy the public URL, and unpublish the entire story.
+// Phase A update: adds Genre & Tags section.
+// Genre is editable via dropdown. Tags are editable with TagInput.
+// Changes save on button click — not auto-save.
 
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PublishedStory, StoryStatus } from '@/lib/supabase/types'
+import { PublishedStory, StoryStatus, Genre } from '@/lib/supabase/types'
+import TagInput from '@/components/tag/TagInput'
 import {
-  Globe,
-  Copy,
-  Check,
-  BookOpen,
-  Loader2,
-  AlertTriangle,
-  ExternalLink,
-  ChevronDown,
+  Globe, Copy, Check, Loader2, AlertTriangle, ExternalLink, ChevronDown,
 } from 'lucide-react'
 
 interface Chapter {
-  id: string
-  title: string
-  order_index: number | null
+  id:           string
+  title:        string
+  order_index:  number | null
   is_published: boolean
 }
 
 interface ManagePublishingProps {
-  project: { id: string; title: string }
-  story:   PublishedStory
+  project:  { id: string; title: string }
+  story:    PublishedStory & { genre_id: string | null }
   chapters: Chapter[]
+  initialGenreName?: string | null
+  initialTags?:      string[]
 }
 
 const STATUS_LABELS: Record<StoryStatus, string> = {
@@ -39,26 +35,38 @@ const STATUS_LABELS: Record<StoryStatus, string> = {
 }
 
 export default function ManagePublishing({
-  project,
-  story,
-  chapters,
+  project, story, chapters,
+  initialGenreName = null,
+  initialTags = [],
 }: ManagePublishingProps) {
   const router = useRouter()
 
-  const [localChapters, setLocalChapters] = useState(chapters)
-  const [storyStatus, setStoryStatus]     = useState<StoryStatus>(story.status)
-  const [copied, setCopied]               = useState(false)
-  const [togglingId, setTogglingId]       = useState<string | null>(null)
-  const [statusOpen, setStatusOpen]       = useState(false)
+  const [localChapters,  setLocalChapters]  = useState(chapters)
+  const [storyStatus,    setStoryStatus]    = useState<StoryStatus>(story.status)
+  const [copied,         setCopied]         = useState(false)
+  const [togglingId,     setTogglingId]     = useState<string | null>(null)
+  const [statusOpen,     setStatusOpen]     = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false)
-  const [unpublishing, setUnpublishing]   = useState(false)
+  const [unpublishing,   setUnpublishing]   = useState(false)
+
+  // Genre + tags state
+  const [genres,       setGenres]       = useState<Genre[]>([])
+  const [genreId,      setGenreId]      = useState<string>(story.genre_id ?? '')
+  const [tags,         setTags]         = useState<string[]>(initialTags)
+  const [savingGenreTags, setSavingGenreTags] = useState(false)
+  const [genreTagsSaved,  setGenreTagsSaved]  = useState(false)
 
   const publicUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/story/${story.slug}`
     : `/story/${story.slug}`
 
-  // ── Copy link ─────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/genres')
+      .then((r) => r.json())
+      .then((d) => setGenres(d.genres ?? []))
+      .catch(() => {})
+  }, [])
 
   function handleCopy() {
     navigator.clipboard.writeText(publicUrl)
@@ -66,56 +74,62 @@ export default function ManagePublishing({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // ── Toggle chapter publish state ──────────────────────────
-
   async function toggleChapter(chapter: Chapter) {
     setTogglingId(chapter.id)
-
     const method = chapter.is_published ? 'DELETE' : 'POST'
     const res = await fetch(`/api/publish/chapter/${chapter.id}`, { method })
-
     if (res.ok) {
       setLocalChapters((prev) =>
-        prev.map((c) =>
-          c.id === chapter.id ? { ...c, is_published: !c.is_published } : c
-        )
+        prev.map((c) => c.id === chapter.id ? { ...c, is_published: !c.is_published } : c)
       )
     }
-
     setTogglingId(null)
   }
-
-  // ── Update story status ───────────────────────────────────
 
   async function handleStatusChange(newStatus: StoryStatus) {
     setStatusOpen(false)
     if (newStatus === storyStatus) return
-
     setUpdatingStatus(true)
     const res = await fetch('/api/publish/story', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: story.id, status: newStatus }),
     })
-
     if (res.ok) setStoryStatus(newStatus)
     setUpdatingStatus(false)
   }
 
-  // ── Unpublish entire story ────────────────────────────────
-
   async function handleUnpublish() {
     setUnpublishing(true)
-    const res = await fetch(`/api/publish/story`, {
+    const res = await fetch('/api/publish/story', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: story.id, is_published: false }),
     })
-
-    if (res.ok) {
-      router.push(`/project/${project.id}`)
-    }
+    if (res.ok) router.push(`/project/${project.id}`)
     setUnpublishing(false)
+  }
+
+  async function handleSaveGenreTags() {
+    setSavingGenreTags(true)
+
+    // Update genre_id on published_stories
+    await fetch('/api/publish/story', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: story.id, genre_id: genreId || null }),
+    })
+
+    // Replace tags
+    await fetch(`/api/story/${story.id}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    })
+
+    setSavingGenreTags(false)
+    setGenreTagsSaved(true)
+    setTimeout(() => setGenreTagsSaved(false), 2000)
   }
 
   const publishedCount = localChapters.filter((c) => c.is_published).length
@@ -128,9 +142,7 @@ export default function ManagePublishing({
         <div className="max-w-2xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Globe size={15} className="text-emerald-500" />
-            <span className="font-serif text-stone-800 truncate max-w-[200px]">
-              {story.title}
-            </span>
+            <span className="font-serif text-stone-800 truncate max-w-[200px]">{story.title}</span>
             <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-['Inter']">
               Live
             </span>
@@ -152,9 +164,7 @@ export default function ManagePublishing({
             Public URL
           </h3>
           <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
-            <span className="text-sm text-stone-600 font-['Inter'] flex-1 truncate">
-              {publicUrl}
-            </span>
+            <span className="text-sm text-stone-600 font-['Inter'] flex-1 truncate">{publicUrl}</span>
             <button
               onClick={() => window.open(publicUrl, '_blank')}
               className="p-1.5 text-stone-400 hover:text-stone-600 transition-colors"
@@ -172,6 +182,56 @@ export default function ManagePublishing({
           </div>
         </section>
 
+        {/* Genre & Tags */}
+        <section>
+          <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider font-['Inter'] mb-4">
+            Genre & Tags
+          </h3>
+
+          <div className="space-y-4">
+            {/* Genre dropdown */}
+            <div>
+              <label className="block text-xs text-stone-500 font-['Inter'] mb-1.5">Genre</label>
+              <div className="relative max-w-xs">
+                <select
+                  value={genreId}
+                  onChange={(e) => setGenreId(e.target.value)}
+                  className="w-full appearance-none px-3 py-2.5 bg-white border border-stone-200 rounded-lg text-stone-800 text-sm font-['Inter'] focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 pr-9 cursor-pointer"
+                >
+                  <option value="">No genre selected</option>
+                  {genres.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs text-stone-500 font-['Inter'] mb-1.5">Tags</label>
+              <TagInput tags={tags} onChange={setTags} />
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveGenreTags}
+                disabled={savingGenreTags}
+                className="flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded-lg font-['Inter'] transition-colors disabled:opacity-50"
+              >
+                {savingGenreTags && <Loader2 size={13} className="animate-spin" />}
+                Save changes
+              </button>
+              {genreTagsSaved && (
+                <span className="text-xs text-emerald-600 font-['Inter'] flex items-center gap-1">
+                  <Check size={12} /> Saved
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Story Status */}
         <section>
           <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider font-['Inter'] mb-3">
@@ -183,25 +243,21 @@ export default function ManagePublishing({
               disabled={updatingStatus}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-stone-200 rounded-lg text-sm font-['Inter'] text-stone-700 hover:border-stone-300 transition-colors"
             >
-              {updatingStatus
-                ? <Loader2 size={13} className="animate-spin text-stone-400" />
-                : null}
+              {updatingStatus && <Loader2 size={13} className="animate-spin text-stone-400" />}
               {STATUS_LABELS[storyStatus]}
               <ChevronDown size={13} className="text-stone-400" />
             </button>
-
             {statusOpen && (
               <div className="absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-10 overflow-hidden py-1 min-w-[140px]">
                 {(Object.keys(STATUS_LABELS) as StoryStatus[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => handleStatusChange(s)}
-                    className={`
-                      w-full text-left px-4 py-2 text-sm font-['Inter'] transition-colors
-                      ${s === storyStatus
+                    className={`w-full text-left px-4 py-2 text-sm font-['Inter'] transition-colors ${
+                      s === storyStatus
                         ? 'text-stone-800 bg-stone-50 font-medium'
-                        : 'text-stone-600 hover:bg-stone-50'}
-                    `}
+                        : 'text-stone-600 hover:bg-stone-50'
+                    }`}
                   >
                     {STATUS_LABELS[s]}
                   </button>
@@ -217,15 +273,11 @@ export default function ManagePublishing({
             <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider font-['Inter']">
               Chapters
             </h3>
-            <span className="text-xs text-stone-400 font-['Inter']">
-              {publishedCount} published
-            </span>
+            <span className="text-xs text-stone-400 font-['Inter']">{publishedCount} published</span>
           </div>
 
           {localChapters.length === 0 ? (
-            <p className="text-sm text-stone-400 font-['Inter']">
-              No chapters yet. Create chapters in the editor.
-            </p>
+            <p className="text-sm text-stone-400 font-['Inter']">No chapters yet.</p>
           ) : (
             <div className="space-y-2">
               {localChapters.map((chapter, index) => (
@@ -233,24 +285,11 @@ export default function ManagePublishing({
                   key={chapter.id}
                   className="flex items-center gap-3 px-4 py-3 bg-white border border-stone-200 rounded-xl"
                 >
-                  {/* Status dot */}
-                  <div
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      chapter.is_published ? 'bg-emerald-500' : 'bg-stone-300'
-                    }`}
-                  />
-
-                  {/* Title */}
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${chapter.is_published ? 'bg-emerald-500' : 'bg-stone-300'}`} />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs text-stone-400 font-['Inter']">
-                      Chapter {index + 1}
-                    </span>
-                    <p className="text-sm text-stone-700 font-['Inter'] truncate">
-                      {chapter.title || '[Untitled]'}
-                    </p>
+                    <span className="text-xs text-stone-400 font-['Inter']">Chapter {index + 1}</span>
+                    <p className="text-sm text-stone-700 font-['Inter'] truncate">{chapter.title || '[Untitled]'}</p>
                   </div>
-
-                  {/* Status + toggle */}
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className={`text-xs font-['Inter'] ${chapter.is_published ? 'text-emerald-600' : 'text-stone-400'}`}>
                       {chapter.is_published ? 'Published' : 'Draft'}
@@ -258,21 +297,15 @@ export default function ManagePublishing({
                     <button
                       onClick={() => toggleChapter(chapter)}
                       disabled={togglingId === chapter.id}
-                      className={`
-                        text-xs px-3 py-1.5 rounded-lg border font-['Inter'] transition-colors
-                        ${chapter.is_published
+                      className={`text-xs px-3 py-1.5 rounded-lg border font-['Inter'] transition-colors ${
+                        chapter.is_published
                           ? 'border-stone-200 text-stone-500 hover:border-red-200 hover:text-red-500'
-                          : 'border-amber-200 text-amber-700 hover:bg-amber-50'}
-                        disabled:opacity-40
-                      `}
+                          : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                      } disabled:opacity-40`}
                     >
-                      {togglingId === chapter.id ? (
-                        <Loader2 size={11} className="animate-spin" />
-                      ) : chapter.is_published ? (
-                        'Unpublish'
-                      ) : (
-                        'Publish'
-                      )}
+                      {togglingId === chapter.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : chapter.is_published ? 'Unpublish' : 'Publish'}
                     </button>
                   </div>
                 </div>
@@ -294,8 +327,7 @@ export default function ManagePublishing({
                   Unpublish entire story
                 </p>
                 <p className="text-xs text-stone-500 font-['Inter'] mb-3">
-                  Your story will be removed from the feed and all public URLs will show "not found". 
-                  Your writing is never deleted.
+                  Your story will be removed from the feed. Your writing is never deleted.
                 </p>
                 {!showUnpublishConfirm ? (
                   <button
