@@ -1,14 +1,14 @@
 // components/story/StoryPage.tsx
-// Public story info page layout.
-// Shows: cover, title, author, hook, rating/status badges,
-// full description, chapter list with CTA, author section.
+// Phase A update: adds GenreBadge and full TagList to the story header.
 
 'use client'
 
 import { useRouter } from 'next/navigation'
 import { PublishedStory, Profile, ContentRating, StoryStatus } from '@/lib/supabase/types'
 import CoverPlaceholder from '@/components/feed/CoverPlaceholder'
-import { BookOpen, ArrowLeft, Lock } from 'lucide-react'
+import GenreBadge from '@/components/genre/GenreBadge'
+import TagList from '@/components/tag/TagList'
+import { ArrowLeft, Lock } from 'lucide-react'
 
 interface PublishedChapter {
   document_id:  string
@@ -22,8 +22,12 @@ interface StoryPageProps {
   chapters:       PublishedChapter[]
   draftCount:     number
   author:         Pick<Profile, 'username' | 'display_name' | 'avatar_url' | 'bio'> | null
-  resumePosition: number | null   // null = not started
+  resumePosition: number | null
   isLoggedIn:     boolean
+  genreName:      string | null   // Phase A
+  genreSlug:      string | null   // Phase A
+  genreColor:     string | null   // Phase A
+  tags:           string[]        // Phase A
 }
 
 const RATING_LABELS: Record<ContentRating, string> = {
@@ -46,31 +50,20 @@ const STATUS_COLORS: Record<StoryStatus, string> = {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day:   'numeric',
-    year:  'numeric',
+    month: 'short', day: 'numeric', year: 'numeric',
   })
 }
 
 export default function StoryPage({
-  story,
-  chapters,
-  draftCount,
-  author,
-  resumePosition,
-  isLoggedIn,
+  story, chapters, draftCount, author, resumePosition, isLoggedIn,
+  genreName, genreSlug, genreColor, tags,
 }: StoryPageProps) {
   const router = useRouter()
 
-  const hasStarted  = resumePosition !== null
   const ctaPosition = resumePosition ?? 1
-  const ctaLabel    = hasStarted
+  const ctaLabel    = resumePosition
     ? `Continue Reading — Chapter ${resumePosition}`
     : 'Start Reading →'
-
-  function handleCTA() {
-    router.push(`/story/${story.slug}/chapter/${ctaPosition}`)
-  }
 
   const authorName = author?.display_name ?? author?.username ?? 'Unknown Author'
   const authorHref = author?.username ? `/author/${author.username}` : null
@@ -78,7 +71,6 @@ export default function StoryPage({
   return (
     <div className="min-h-screen bg-[#faf9f7]">
 
-      {/* Back button */}
       <div className="max-w-3xl mx-auto px-6 pt-6">
         <button
           onClick={() => router.back()}
@@ -91,7 +83,7 @@ export default function StoryPage({
 
       <main className="max-w-3xl mx-auto px-6 py-8">
 
-        {/* ── Story header ──────────────────────────────── */}
+        {/* Story header */}
         <div className="flex gap-8 mb-10">
 
           {/* Cover */}
@@ -116,7 +108,6 @@ export default function StoryPage({
               {story.title}
             </h1>
 
-            {/* Author */}
             <p className="text-sm text-stone-500 font-['Inter'] mb-3">
               by{' '}
               {authorHref ? (
@@ -131,15 +122,14 @@ export default function StoryPage({
               )}
             </p>
 
-            {/* Hook */}
             {story.hook && (
               <p className="font-serif text-base text-stone-600 italic leading-relaxed mb-4">
                 "{story.hook}"
               </p>
             )}
 
-            {/* Badges */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Rating + status badges */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               <span className="text-xs text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full font-['Inter']">
                 {RATING_LABELS[story.content_rating]}
               </span>
@@ -151,10 +141,20 @@ export default function StoryPage({
                 {draftCount > 0 && ` · ${draftCount} coming`}
               </span>
             </div>
+
+            {/* Genre badge */}
+            {genreName && genreSlug && genreColor && (
+              <div className="mb-2">
+                <GenreBadge name={genreName} slug={genreSlug} color={genreColor} size="sm" />
+              </div>
+            )}
+
+            {/* All tags */}
+            {tags.length > 0 && <TagList tags={tags} />}
           </div>
         </div>
 
-        {/* ── Description ───────────────────────────────── */}
+        {/* Description */}
         {story.description && (
           <section className="mb-10">
             <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider font-['Inter'] mb-3">
@@ -167,7 +167,7 @@ export default function StoryPage({
           </section>
         )}
 
-        {/* ── Chapter list ──────────────────────────────── */}
+        {/* Chapter list */}
         <section className="mb-10">
           <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider font-['Inter'] mb-3">
             Chapters
@@ -175,17 +175,13 @@ export default function StoryPage({
           <div className="w-full h-px bg-stone-200 mb-4" />
 
           {chapters.length === 0 ? (
-            <p className="text-sm text-stone-400 font-['Inter']">
-              No chapters published yet.
-            </p>
+            <p className="text-sm text-stone-400 font-['Inter']">No chapters published yet.</p>
           ) : (
             <div className="space-y-1">
               {chapters.map((ch) => (
                 <button
                   key={ch.document_id}
-                  onClick={() =>
-                    router.push(`/story/${story.slug}/chapter/${ch.position}`)
-                  }
+                  onClick={() => router.push(`/story/${story.slug}/chapter/${ch.position}`)}
                   className="w-full flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-stone-100 transition-colors group text-left"
                 >
                   <span className="text-sm text-stone-300 font-['Inter'] w-6 flex-shrink-0 text-right">
@@ -200,7 +196,6 @@ export default function StoryPage({
                 </button>
               ))}
 
-              {/* Draft placeholders */}
               {draftCount > 0 && (
                 <div className="flex items-center gap-4 px-4 py-3 opacity-40 select-none">
                   <Lock size={12} className="text-stone-400 ml-1 flex-shrink-0" />
@@ -212,11 +207,10 @@ export default function StoryPage({
             </div>
           )}
 
-          {/* CTA */}
           {chapters.length > 0 && (
             <div className="mt-6">
               <button
-                onClick={handleCTA}
+                onClick={() => router.push(`/story/${story.slug}/chapter/${ctaPosition}`)}
                 className="w-full py-3 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded-xl font-['Inter'] transition-colors"
               >
                 {ctaLabel}
@@ -225,16 +219,14 @@ export default function StoryPage({
           )}
         </section>
 
-        {/* ── Author section ────────────────────────────── */}
+        {/* Author */}
         {author && (
           <section>
             <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider font-['Inter'] mb-3">
               About the Author
             </h2>
             <div className="w-full h-px bg-stone-200 mb-4" />
-
             <div className="flex items-start gap-4">
-              {/* Avatar */}
               {author.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -249,22 +241,14 @@ export default function StoryPage({
                   </span>
                 </div>
               )}
-
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-800 font-['Inter']">
-                  {authorName}
-                </p>
+                <p className="text-sm font-semibold text-stone-800 font-['Inter']">{authorName}</p>
                 {author.username && (
-                  <p className="text-xs text-stone-400 font-['Inter'] mb-2">
-                    @{author.username}
-                  </p>
+                  <p className="text-xs text-stone-400 font-['Inter'] mb-2">@{author.username}</p>
                 )}
                 {author.bio && (
-                  <p className="text-sm text-stone-500 font-['Inter'] leading-relaxed">
-                    {author.bio}
-                  </p>
+                  <p className="text-sm text-stone-500 font-['Inter'] leading-relaxed">{author.bio}</p>
                 )}
-
                 {authorHref && (
                   <button
                     onClick={() => router.push(authorHref)}

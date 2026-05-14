@@ -169,6 +169,68 @@ export interface ContinueReadingItem {
   last_read_at: string
 }
 
+// New
+// ── Update PublishedStory — add genre_id ──────────────────────────
+export interface PublishedStory {
+  id: string
+  project_id: string
+  user_id: string
+  slug: string
+  title: string
+  hook: string | null
+  description: string | null
+  cover_url: string | null
+  content_rating: ContentRating
+  status: StoryStatus
+  is_published: boolean
+  published_at: string
+  updated_at: string
+  genre_id: string | null   // ← added Phase A
+}
+
+// ── Chunk 2 Phase A new types ─────────────────────────────────────
+
+export interface Genre {
+  id: string
+  name: string
+  slug: string
+  color: string
+  sort_order: number
+}
+
+export interface Tag {
+  id: string
+  name: string
+  use_count: number
+  created_at: string
+}
+
+export interface StoryTag {
+  id: string
+  published_story_id: string
+  tag_id: string
+  created_at: string
+}
+
+// Story card shape with genre + tags — used in feeds and browse pages
+export interface StoryCardData {
+  id: string
+  slug: string
+  title: string
+  hook: string | null
+  cover_url: string | null
+  status: string
+  content_rating: string
+  genre_name: string | null
+  genre_slug: string | null
+  genre_color: string | null
+  tag_names: string[]
+  author_name: string | null
+  author_username: string | null
+  author_avatar: string | null
+}
+
+
 // ── Supabase Database shape ───────────────────────────────────
 
 export type Database = {
