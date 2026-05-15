@@ -1,10 +1,13 @@
 // app/(reader)/story/[slug]/chapter/[number]/page.tsx
-// Chapter reading page.
+// Chapter reading page. Stays a Server Component for data fetching.
+// Passes chapter HTML and auth state down to ChapterAnnotationShell
+// (client component) which owns all interactive annotation behaviour.
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
+import ChapterAnnotationShell from '@/components/reader/ChapterAnnotationShell'
 
 interface ChapterReadPageProps {
   params: { slug: string; number: string }
@@ -53,7 +56,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
   const prevPosition = position > 1 ? position - 1 : null
   const nextPosition = position < allChapters.length ? position + 1 : null
 
-  // Update reading progress if logged in
+  // Update reading progress + resolve auth status for annotation shell
   const { data: { user } } = await supabase.auth.getUser()
   if (user) {
     await supabase
@@ -91,10 +94,17 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </h1>
         </div>
 
-        {/* Chapter content */}
-        <div
-          className="editor-content"
-          dangerouslySetInnerHTML={{ __html: chapter.content ?? '' }}
+        {/*
+          ChapterAnnotationShell (client) owns:
+            - the ref'd div wrapping chapter prose
+            - HighlightLayer  (DOM mutation, renders nothing)
+            - SelectionToolbar (floating, appears on text selection)
+            - StaleHighlightBanner (shown above prose when stale highlights exist)
+        */}
+        <ChapterAnnotationShell
+          documentId={chapter.id}
+          isLoggedIn={!!user}
+          chapterHtml={chapter.content ?? ''}
         />
 
         {/* Chapter navigation */}

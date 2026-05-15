@@ -106,3 +106,15 @@
 .focus-mode .editor-content p:focus-within {
   opacity: 1;
 }
+/* ── Reader highlight marks ──────────────────────────────── */
+mark.highlight {
+  background-color: #FEF08A;
+  border-radius: 2px;
+  padding: 0 1px;
+  /* Preserve cursor and allow re-selection */
+  cursor: text;
+}
+
+mark.highlight:hover {
+  background-color: #fde047;
+}
