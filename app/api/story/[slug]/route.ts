@@ -12,15 +12,16 @@ import { normalizeTag } from '@/lib/utils/normalizeTag'
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { slug } = await params
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // params.slug is actually the story UUID (the client sends the ID, not the slug)
-  const storyId = params.slug
+  // slug is actually the story UUID (the client sends the ID, not the slug)
+  const storyId = slug
 
   // Verify ownership
   const { data: story } = await supabase

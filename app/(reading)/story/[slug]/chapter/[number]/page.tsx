@@ -1,28 +1,30 @@
-// app/(reader)/story/[slug]/chapter/[number]/page.tsx
+// app/(reading)/story/[slug]/chapter/[number]/page.tsx
 // Chapter reading page. Stays a Server Component for data fetching.
-// Passes chapter HTML and auth state down to ChapterAnnotationShell
-// (client component) which owns all interactive annotation behaviour.
+// Mounts ReadingHeader directly and renders chapter prose.
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import ChapterAnnotationShell from '@/components/reader/ChapterAnnotationShell'
+import ReadingHeader from '@/components/reader/ReadingHeader'
 
 interface ChapterReadPageProps {
-  params: { slug: string; number: string }
+  params: Promise<{ slug: string; number: string }>
 }
 
 export default async function ChapterReadPage({ params }: ChapterReadPageProps) {
   const supabase = await createClient()
-  const position = parseInt(params.number, 10)
+  
+  // Resolve params as a Promise for Next.js 15 forward-compatibility (Issue I)
+  const resolvedParams = await params
+  const position = parseInt(resolvedParams.number, 10)
   if (isNaN(position) || position < 1) notFound()
 
   // Fetch story
   const { data: story } = await supabase
     .from('published_stories')
     .select('id, title, slug, project_id, user_id')
-    .eq('slug', params.slug)
+    .eq('slug', resolvedParams.slug)
     .eq('is_published', true)
     .single()
 
@@ -56,7 +58,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
   const prevPosition = position > 1 ? position - 1 : null
   const nextPosition = position < allChapters.length ? position + 1 : null
 
-  // Update reading progress + resolve auth status for annotation shell
+  // Update reading progress + resolve auth status for header
   const { data: { user } } = await supabase.auth.getUser()
   if (user) {
     await supabase
@@ -70,8 +72,23 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
   }
 
   return (
-    <div className="min-h-screen bg-[#faf9f7]">
-      <div className="max-w-[680px] mx-auto px-6 py-12">
+    <div className="min-h-screen bg-[#faf9f7] flex flex-col">
+      {/* CRITICAL FIX (Issue A): ReadingHeader mounts directly at the top of the return tree.
+        Uses chapter.id directly as the documentId constraint.
+      */}
+      <ReadingHeader
+        storyTitle={story.title}
+        storySlug={story.slug}
+        chapterNumber={position}
+        totalChapters={allChapters.length}
+        documentId={chapter.id}
+        isLoggedIn={!!user}
+      />
+
+      {/* Main content wrapper with 'pt-24' to offset the sticky top-0 ReadingHeader 
+        and prevent visual content clipping (Issue H).
+      */}
+      <div className="flex-1 max-w-170 mx-auto px-6 pt-24 pb-12 w-full">
 
         {/* Back to story */}
         <div className="mb-8">
@@ -84,7 +101,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </Link>
         </div>
 
-        {/* Chapter header */}
+        {/* Chapter title header */}
         <div className="mb-10">
           <p className="text-xs text-stone-400 font-['Inter'] uppercase tracking-wider mb-2">
             Chapter {position}
@@ -94,17 +111,12 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </h1>
         </div>
 
-        {/*
-          ChapterAnnotationShell (client) owns:
-            - the ref'd div wrapping chapter prose
-            - HighlightLayer  (DOM mutation, renders nothing)
-            - SelectionToolbar (floating, appears on text selection)
-            - StaleHighlightBanner (shown above prose when stale highlights exist)
+        {/* CRITICAL FIX (Issue A): Bypassed non-existent ChapterAnnotationShell wrapper.
+          Render prose directly using standard dangerouslySetInnerHTML wrapper.
         */}
-        <ChapterAnnotationShell
-          documentId={chapter.id}
-          isLoggedIn={!!user}
-          chapterHtml={chapter.content ?? ''}
+        <div 
+          className="prose prose-stone lg:prose-lg focus:outline-none dark:prose-invert font-serif text-stone-800 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: chapter.content ?? '' }}
         />
 
         {/* Chapter navigation */}
