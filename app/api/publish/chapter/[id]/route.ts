@@ -27,6 +27,15 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Mark any existing inline comments as stale on publish.
+  // The chapter content may have changed since it was last published,
+  // so any previously saved comment offsets can no longer be trusted.
+  await supabase
+    .from('inline_comments')
+    .update({ is_stale: true })
+    .eq('document_id', params.id)
+    .eq('is_stale', false)
+
   // Increment published_chapter_count on the story
   await supabase.rpc('increment_chapter_count', { story_project_id: params.id })
 
@@ -107,10 +116,9 @@ export async function PATCH(
       .from('highlights')
       .update({ is_stale: true })
       .eq('document_id', params.id)
-      .eq('is_stale', false)   // only update rows not already stale
+      .eq('is_stale', false)
 
     if (highlightStaleError) {
-      // Non-fatal — log and continue. The document was saved successfully.
       console.error(
         '[PATCH /api/publish/chapter] Failed to mark highlights stale:',
         highlightStaleError.message
@@ -126,8 +134,6 @@ export async function PATCH(
       .eq('is_stale', false)
 
     if (commentStaleError) {
-      // Expected to fail during Phase A before inline_comments table exists.
-      // Safe to ignore.
       console.warn(
         '[PATCH /api/publish/chapter] inline_comments staleness update skipped:',
         commentStaleError.message
