@@ -1,7 +1,8 @@
 // app/(reading)/layout.tsx
-import { createClient } from '@/lib/supabase/server'
+// Minimal layout wrapper for the reading route group.
+// Auth is handled at the page level — this layout has no chrome.
 
-export default async function ReadingLayout({
+export default function ReadingLayout({
   children,
 }: {
   children: React.ReactNode

@@ -172,6 +172,7 @@ export interface ReadingList {
   created_at: string
 }
 
+
 export interface ReadingListItem {
   id: string
   list_id: string

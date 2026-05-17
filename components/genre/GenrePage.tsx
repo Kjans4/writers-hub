@@ -4,7 +4,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Genre, StoryCardData } from '@/lib/supabase/types'
+import { Genre, StoryCard as StoryCardData } from '@/lib/supabase/types'
 import StoryCard from '@/components/feed/StoryCard'
 import TagPill from '@/components/tag/TagPill'
 import { ChevronDown } from 'lucide-react'
@@ -20,10 +20,9 @@ interface GenrePageProps {
   currentTag:    string
 }
 
+// Only 'newest' is supported until save_count / total_reads columns exist
 const SORT_OPTIONS = [
-  { value: 'newest',    label: 'Newest'     },
-  { value: 'most_saved', label: 'Most Saved' },
-  { value: 'most_read',  label: 'Most Read'  },
+  { value: 'newest', label: 'Newest' },
 ]
 
 const STATUS_OPTIONS = [
@@ -93,24 +92,8 @@ export default function GenrePage({
         </div>
       )}
 
-      {/* Sort + Status filters */}
+      {/* Status filter (sort hidden — only one option) */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-stone-400 font-['Inter']">Sort by</span>
-          <div className="relative">
-            <select
-              value={currentSort}
-              onChange={(e) => updateParam('sort', e.target.value)}
-              className="appearance-none pl-3 pr-7 py-1.5 text-xs font-['Inter'] bg-white border border-stone-200 rounded-lg text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400/50 cursor-pointer"
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-          </div>
-        </div>
-
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-stone-400 font-['Inter']">Status</span>
           <div className="relative">
