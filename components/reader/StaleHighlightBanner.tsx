@@ -78,13 +78,13 @@ export default function StaleHighlightBanner({
   }
 
   return (
-    <div className="max-w-[680px] mx-auto mb-6 px-6">
+    <div className="max-w-170 mx-auto mb-6 px-6">
       <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-amber-100">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
+            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
             <p className="text-sm font-['Inter'] text-amber-800 font-medium">
               {remaining.length === 1
                 ? '1 highlight may have shifted'
@@ -129,7 +129,7 @@ export default function StaleHighlightBanner({
               <button
                 onClick={() => handleRemove(highlight.id)}
                 disabled={deleting.has(highlight.id)}
-                className="flex items-center gap-1 text-xs font-['Inter'] text-stone-400 hover:text-red-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                className="flex items-center gap-1 text-xs font-['Inter'] text-stone-400 hover:text-red-500 transition-colors shrink-0 disabled:opacity-50"
               >
                 {deleting.has(highlight.id)
                   ? <Loader2 size={11} className="animate-spin" />

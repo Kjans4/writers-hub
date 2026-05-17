@@ -41,6 +41,17 @@ export interface Branch {
   created_at: string
 }
 
+// Genre added
+export interface Genre {
+  id: string
+  name: string
+  slug: string
+  color: string
+  created_at: string | null
+  sort_order: number 
+  created_by: string 
+}
+
 export interface Document {
   id: string
   project_id: string
@@ -100,6 +111,7 @@ export interface PublishedStory {
   id: string
   project_id: string
   user_id: string
+  genre_id: string | null
   slug: string
   title: string
   hook: string | null

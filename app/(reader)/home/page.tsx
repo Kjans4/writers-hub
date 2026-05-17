@@ -9,12 +9,13 @@ import GenrePillRow from '@/components/genre/GenrePillRow'
 import { Genre } from '@/lib/supabase/types'
 
 interface HomePageProps {
-  searchParams: { genre?: string }
+  searchParams: Promise<{ genre?: string }>
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const supabase       = await createClient()
-  const activeGenreSlug = searchParams.genre ?? ''
+  const { genre }      = await searchParams
+  const activeGenreSlug = genre ?? ''
 
   // All genres for pill row
   const { data: genres } = await supabase

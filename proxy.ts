@@ -1,5 +1,5 @@
 // proxy.ts
-// Next.js 16+ uses proxy.ts instead of middleware.ts.
+// Next.js 16+ middleware execution file.
 // Whitelists public reader routes so unauthenticated users can browse
 // stories, author profiles, and the home feed.
 // Auth-required routes (dashboard, project editor) still redirect to
@@ -28,9 +28,19 @@ function isPublicPath(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // Safe fallback guard: Prevents Next.js/Turbopack from hard-crashing 
+  // if environment variables aren't flushed to the edge runtime bundle yet.
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("⚠️ Supabase environment variables are missing during this request cycle.")
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {

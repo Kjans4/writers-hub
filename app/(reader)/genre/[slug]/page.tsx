@@ -7,29 +7,34 @@ import { Suspense } from 'react'
 import GenrePage from '@/components/genre/GenrePage'
 
 interface GenreRouteProps {
-  params:       { slug: string }
-  searchParams: { sort?: string; status?: string; tag?: string; page?: string }
+  params:       Promise<{ slug: string }>
+  searchParams: Promise<{ sort?: string; status?: string; tag?: string; page?: string }>
 }
 
 export default async function GenreRoute({ params, searchParams }: GenreRouteProps) {
   const supabase = await createClient()
-  const sort     = searchParams.sort   ?? 'newest'
-  const status   = searchParams.status ?? ''
-  const tag      = searchParams.tag    ?? ''
-  const page     = Math.max(1, parseInt(searchParams.page ?? '1', 10))
-  const limit    = 12
-  const offset   = (page - 1) * limit
+
+  const { slug }   = await params
+  const { sort: rawSort, status, tag, page: rawPage } = await searchParams
+
+  const sort   = rawSort ?? 'newest'
+  const filter = status ?? ''
+  const tagFilter = tag ?? ''
+  const page   = Math.max(1, parseInt(rawPage ?? '1', 10))
+  const limit  = 12
+  const offset = (page - 1) * limit
 
   // Resolve genre
   const { data: genre } = await supabase
     .from('genres')
     .select('*')
-    .eq('slug', params.slug)
+    .eq('slug', slug)
     .single()
 
   if (!genre) notFound()
 
-  // Build stories query
+  // Build stories query — only 'newest' sort supported (most_saved/most_read
+  // columns don't exist on published_stories yet)
   let storiesQuery = supabase
     .from('published_stories')
     .select(`
@@ -38,16 +43,9 @@ export default async function GenreRoute({ params, searchParams }: GenreRoutePro
     `)
     .eq('is_published', true)
     .eq('genre_id', genre.id)
+    .order('published_at', { ascending: false })
 
-  if (status) storiesQuery = storiesQuery.eq('status', status)
-
-  if (sort === 'most_saved') {
-    storiesQuery = storiesQuery.order('save_count',   { ascending: false })
-  } else if (sort === 'most_read') {
-    storiesQuery = storiesQuery.order('total_reads',  { ascending: false })
-  } else {
-    storiesQuery = storiesQuery.order('published_at', { ascending: false })
-  }
+  if (filter) storiesQuery = storiesQuery.eq('status', filter)
 
   storiesQuery = storiesQuery.range(offset, offset + limit - 1)
 
@@ -55,11 +53,11 @@ export default async function GenreRoute({ params, searchParams }: GenreRoutePro
   let stories = rawStories ?? []
 
   // Tag filter
-  if (tag) {
+  if (tagFilter) {
     const { data: tagRow } = await supabase
       .from('tags')
       .select('id')
-      .eq('name', tag)
+      .eq('name', tagFilter)
       .single()
 
     if (tagRow) {
@@ -155,8 +153,8 @@ export default async function GenreRoute({ params, searchParams }: GenreRoutePro
         hasMore={enriched.length === limit}
         currentPage={page}
         currentSort={sort}
-        currentStatus={status}
-        currentTag={tag}
+        currentStatus={filter}
+        currentTag={tagFilter}
       />
     </Suspense>
   )
