@@ -1,14 +1,5 @@
 // components/library/BookmarkCard.tsx
 // A single bookmarked chapter card shown in the /library Bookmarked tab.
-//
-// Displays:
-//   - Story cover thumbnail (CoverPlaceholder fallback using story_id for
-//     consistent color across all story surfaces)
-//   - Story title as a navigation link
-//   - "Ch. N — Chapter title"
-//   - "Bookmarked [date]"
-//   - "Continue →" button to the correct chapter URL
-//   - Remove button (visible on hover) that calls the toggle POST endpoint
 
 'use client'
 
@@ -19,7 +10,7 @@ import CoverPlaceholder from '@/components/feed/CoverPlaceholder'
 interface BookmarkCardProps {
   id:              string
   document_id:     string
-  story_id:        string   // published_stories.id — for CoverPlaceholder color
+  story_id:        string
   chapter_number:  number
   chapter_title:   string
   story_slug:      string
@@ -54,11 +45,10 @@ export default function BookmarkCard({
   async function handleRemove(e: React.MouseEvent) {
     e.stopPropagation()
     try {
-      // Toggle endpoint: if bookmarked, POST deletes it
       await fetch(`/api/bookmarks/${document_id}`, { method: 'POST' })
       onRemove(id)
     } catch {
-      // Non-fatal — card stays visible, user can retry
+      // Non-fatal
     }
   }
 
@@ -78,8 +68,6 @@ export default function BookmarkCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          // story_id (not document_id) gives the same color as all other
-          // placeholders for this story across the feed, story page, author page
           <CoverPlaceholder storyId={story_id} title={story_title} />
         )}
       </div>

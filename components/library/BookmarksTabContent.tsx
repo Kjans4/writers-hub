@@ -32,7 +32,7 @@ export default function BookmarksTabContent() {
         setBookmarks(data.bookmarks || [])
       } catch (err) {
         console.error('Failed to load bookmarks:', err)
-      } {
+      } finally {
         setLoading(false)
       }
     }
@@ -40,12 +40,9 @@ export default function BookmarksTabContent() {
   }, [])
 
   async function handleRemoveBookmark(documentId: string, e: React.MouseEvent) {
-    e.stopPropagation() // Prevent navigating to the chapter when clicking delete
-    
+    e.stopPropagation()
     try {
-      const res = await fetch(`/api/bookmarks/${documentId}`, {
-        method: 'POST', // Our toggle route handles deletion on POST if already present
-      })
+      const res = await fetch(`/api/bookmarks/${documentId}`, { method: 'POST' })
       if (res.ok) {
         setBookmarks(prev => prev.filter(b => b.document_id !== documentId))
       }
@@ -79,7 +76,9 @@ export default function BookmarksTabContent() {
       {bookmarks.map((bookmark) => (
         <div
           key={bookmark.id}
-          onClick={() => router.push(`/story/${bookmark.story_slug}/chapter/${bookmark.document_id}`)}
+          onClick={() =>
+            router.push(`/story/${bookmark.story_slug}/chapter/${bookmark.chapter_number}`)
+          }
           className="group border border-stone-100 rounded-2xl p-3 flex items-center gap-4 bg-white hover:border-stone-300 hover:shadow-sm transition-all cursor-pointer relative"
         >
           {/* Story Cover Thumbnail */}
@@ -97,7 +96,7 @@ export default function BookmarksTabContent() {
             )}
           </div>
 
-          {/* Text Metadata Details */}
+          {/* Text Metadata */}
           <div className="flex-1 min-w-0 pr-16 font-['Inter']">
             <span className="text-[11px] font-medium uppercase tracking-wider text-amber-600 block mb-0.5">
               Ch. {bookmark.chapter_number} — {bookmark.chapter_title}
@@ -111,7 +110,7 @@ export default function BookmarksTabContent() {
             </div>
           </div>
 
-          {/* Quick Remove Action Button */}
+          {/* Remove button */}
           <button
             onClick={(e) => handleRemoveBookmark(bookmark.document_id, e)}
             className="absolute right-4 p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
