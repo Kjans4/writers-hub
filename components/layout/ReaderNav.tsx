@@ -1,15 +1,13 @@
 // components/layout/ReaderNav.tsx
 // Global navigation bar shown on all reader-facing pages.
-// Links: Home (feed), Write (editor dashboard), Search (disabled until Chunk 2).
-// Avatar dropdown: profile, settings, sign out.
-// Unauthenticated users see Login / Sign up instead of avatar.
+// Library link added (logged-in only) between Write and Search.
 
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BookOpen, Home, PenLine, Search, ChevronDown, User, LogOut } from 'lucide-react'
+import { BookOpen, Home, PenLine, Search, Library, ChevronDown, User, LogOut } from 'lucide-react'
 
 interface ReaderNavProps {
   user:    { id: string; email?: string } | null
@@ -24,7 +22,6 @@ export default function ReaderNav({ user, profile }: ReaderNavProps) {
   const [avatarOpen, setAvatarOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -83,6 +80,17 @@ export default function ReaderNav({ user, profile }: ReaderNavProps) {
             Write
           </button>
 
+          {/* Library — logged-in only */}
+          {user && (
+            <button
+              onClick={() => router.push('/library')}
+              className={`${navLinkBase} ${isActive('/library') ? navLinkActive : navLinkIdle}`}
+            >
+              <Library size={14} />
+              Library
+            </button>
+          )}
+
           <button
             disabled
             className={`${navLinkBase} opacity-40 cursor-not-allowed ${navLinkIdle}`}
@@ -118,7 +126,6 @@ export default function ReaderNav({ user, profile }: ReaderNavProps) {
               onClick={() => setAvatarOpen((o) => !o)}
               className="flex items-center gap-2 pl-2 pr-1.5 py-1.5 rounded-lg hover:bg-stone-100 transition-colors"
             >
-              {/* Avatar */}
               {profile?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

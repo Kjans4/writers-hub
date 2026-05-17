@@ -3,18 +3,14 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Bookmark, FolderHeart, Loader2 } from 'lucide-react'
+import { Bookmark, FolderHeart } from 'lucide-react'
 import ReadingListsTab from '@/components/library/ReadingListsTab'
-
-// Mocking or importing your existing bookmarks tab component logic 
-// (or inline list view we completed in Phase C)
-import BookmarksTabContent from '@/components/library/BookmarksTabContent' 
+import BookmarksTabContent from '@/components/library/BookmarksTabContent'
 
 export default function LibraryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
-  // Synchronize state with URL query parameters (?tab=bookmarks or ?tab=lists)
+
   const currentTab = searchParams.get('tab') === 'lists' ? 'lists' : 'bookmarks'
   const [activeTab, setActiveTab] = useState<'bookmarks' | 'lists'>(currentTab)
 
@@ -29,16 +25,15 @@ export default function LibraryPage() {
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10 font-['Inter']">
-      
-      {/* Dashboard Section Title */}
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Your Library</h1>
         <p className="text-xs text-stone-400 mt-1">
-          Manage your saved tracking points and custom curated content lists.
+          Manage your saved bookmarks and custom reading lists.
         </p>
       </div>
 
-      {/* Persistent Horizontal Navigation Tab bar */}
+      {/* Tab bar */}
       <div className="flex items-center gap-1 border-b border-stone-200 mb-8 pb-px">
         <button
           onClick={() => handleTabChange('bookmarks')}
@@ -65,7 +60,7 @@ export default function LibraryPage() {
         </button>
       </div>
 
-      {/* Active Tab View Injection Panel */}
+      {/* Active tab */}
       <div className="animate-in fade-in duration-200">
         {activeTab === 'bookmarks' ? (
           <BookmarksTabContent />
