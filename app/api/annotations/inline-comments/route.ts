@@ -1,8 +1,9 @@
 // app/api/annotations/inline-comments/route.ts
 // POST — create a new inline comment on a passage.
-// One comment per reader per paragraph (enforced by DB UNIQUE constraint).
-// If the reader already has a comment on this paragraph, they must use
-// PATCH /api/annotations/inline-comments/[id] to edit it instead.
+// One comment per reader per paragraph (enforced by DB UNIQUE constraint:
+//   UNIQUE(document_id, user_id, paragraph_key)).
+// If the reader already has a comment on this paragraph, the DB will return
+// a 23505 unique-constraint violation — we surface a clear 409.
 //
 // Body:
 //   document_id    string  — UUID of the published chapter document
@@ -57,12 +58,21 @@ export async function POST(req: NextRequest) {
 
   if (
     typeof start_offset !== 'number' ||
-    typeof end_offset !== 'number' ||
-    start_offset < 0 ||
-    end_offset <= start_offset
+    typeof end_offset   !== 'number' ||
+    start_offset < 0
   ) {
     return NextResponse.json(
-      { error: 'start_offset and end_offset must be valid non-negative integers with end > start' },
+      { error: 'start_offset and end_offset must be valid non-negative numbers' },
+      { status: 400 }
+    )
+  }
+
+  // end_offset must be greater than start_offset unless the whole paragraph
+  // was selected via the drawer compose path (start=0, end=len or 1).
+  // We relax the strict end > start guard to end >= start here.
+  if (end_offset < start_offset) {
+    return NextResponse.json(
+      { error: 'end_offset must be >= start_offset' },
       { status: 400 }
     )
   }
@@ -90,7 +100,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    // Unique constraint violation — reader already commented on this paragraph
+    // Unique constraint violation — already commented on this paragraph
     if (error.code === '23505') {
       return NextResponse.json(
         { error: 'You already have a comment on this paragraph. Use PATCH to edit it.' },

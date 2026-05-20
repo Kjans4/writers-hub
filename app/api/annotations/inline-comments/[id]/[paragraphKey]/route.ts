@@ -1,4 +1,4 @@
-// app/api/annotations/inline-comments/[id]/[paragraphKey]/route.ts
+// app/api/annotations/inline-comments/[documentId]/[paragraphKey]/route.ts
 // GET — returns the full flat comment thread for one paragraph.
 // Sorted by appreciation_count DESC (most-loved first), then created_at ASC.
 // Paginated: 20 per page. Pass ?page=2 for subsequent pages (1-based).
@@ -30,14 +30,13 @@ const PAGE_SIZE = 20
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { documentId: string; paragraphKey: string } }
+  { params }: { params: Promise<{ documentId: string; paragraphKey: string }> }
 ) {
   const supabase = await createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
 
-  const { documentId, paragraphKey } = params
+  const { documentId, paragraphKey } = await params
 
   if (!documentId || !paragraphKey) {
     return NextResponse.json(
@@ -47,12 +46,11 @@ export async function GET(
   }
 
   // ── Parse pagination ──────────────────────────────────────
-  const url = new URL(req.url)
-  const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10))
+  const url    = new URL(req.url)
+  const page   = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10))
   const offset = (page - 1) * PAGE_SIZE
 
   // ── Fetch comments for this paragraph ─────────────────────
-  // Include profiles join for author display name + avatar.
   const { data: comments, error: commentsError } = await supabase
     .from('inline_comments')
     .select(`
@@ -92,7 +90,7 @@ export async function GET(
     return NextResponse.json({ error: countError.message }, { status: 500 })
   }
 
-  const total = count ?? 0
+  const total    = count ?? 0
   const has_more = offset + PAGE_SIZE < total
 
   if (!comments || comments.length === 0) {
@@ -106,7 +104,7 @@ export async function GET(
     })
   }
 
-  // ── Fetch which comments the current user has appreciated ─────────
+  // ── Fetch which comments the current user has appreciated ──
   let appreciatedIds = new Set<string>()
   if (userId && comments.length > 0) {
     const commentIds = comments.map((c) => c.id)
@@ -120,15 +118,12 @@ export async function GET(
   }
 
   // ── Shape the response ────────────────────────────────────
-  // Use the first comment's selected_text as the passage preview.
-  // All comments in a paragraph share the same paragraph_key but
-  // may have different offsets — we show the oldest one's text.
   const firstComment = comments[0]
-  const is_stale = comments.some((c) => c.is_stale)
+  const is_stale     = comments.some((c) => c.is_stale)
 
   const shaped = comments.map((c) => {
-    const profile = Array.isArray(c.profiles) ? c.profiles[0] : c.profiles
-    const author_name =
+    const profile      = Array.isArray(c.profiles) ? c.profiles[0] : c.profiles
+    const author_name  =
       (profile as any)?.display_name ??
       (profile as any)?.username ??
       'A reader'

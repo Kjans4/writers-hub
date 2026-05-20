@@ -1,20 +1,22 @@
 // app/api/annotations/inline-comments/[id]/summary/route.ts
 // GET — bubble counts for all paragraphs in a chapter.
-// [id] here is the documentId (chapter UUID).
+// Called as: GET /api/annotations/inline-comments/[documentId]/summary
+//
+// Response:
+//   { bubbles: Array<{ paragraph_key, count, has_mine }> }
 
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ documentId: string }> }
 ) {
   const supabase = await createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
 
-  const documentId = params.id
+  const { documentId } = await params
 
   if (!documentId) {
     return NextResponse.json({ error: 'documentId is required' }, { status: 400 })
@@ -35,6 +37,7 @@ export async function GET(
     return NextResponse.json({ bubbles: [] })
   }
 
+  // Aggregate counts and has_mine per paragraph
   const map = new Map<string, { count: number; has_mine: boolean }>()
 
   for (const row of data) {

@@ -4,24 +4,17 @@
 //
 // Three actions:
 //   🖊 Highlight  — captures anchor, POSTs to highlights API, renders mark
-//   💬 Comment    — placeholder for Phase B (fires no-op for now)
-//   🔖 Bookmark   — placeholder for Phase C (fires no-op for now)
+//   💬 Comment    — captures anchor, opens InlineCommentWrite near selection
+//   🔖 Bookmark   — placeholder for Phase C (fires no-op — bookmark is in header)
 //
 // Rules:
 //   - Only mounts on (reader) pages. Never inside the TipTap editor.
-//   - Highlight button is disabled when captureAnchor() returns null
+//   - Highlight + Comment buttons are disabled when captureAnchor() returns null
 //     (cross-paragraph, no paragraph-key ancestor, or empty selection).
-//   - Logged-out users see a "Log in to save highlights" tooltip instead
-//     of saving.
+//   - Logged-out users see a "Log in to save highlights" tooltip.
 //   - Disappears on click-away or when selection collapses.
-//
-// Props:
-//   containerRef  — ref to the prose container element.
-//                   Only selections inside this element trigger the toolbar.
-//   documentId    — needed for the highlights POST body.
-//   isLoggedIn    — controls logged-out tooltip vs. save behaviour.
-//   onHighlight   — called with the saved highlight id after a successful
-//                   POST so HighlightLayer can re-render immediately.
+//   - Comment click: saves the current selectionRect + anchor, fires onComment
+//     so the parent can mount InlineCommentWrite.
 
 'use client'
 
@@ -30,11 +23,12 @@ import { captureAnchor, AnnotationAnchor } from '@/lib/annotations/captureAnchor
 import { Highlighter, MessageCircle, Bookmark, LogIn, Loader2 } from 'lucide-react'
 
 interface SelectionToolbarProps {
-  // HTMLElement | null matches the RefObject produced by useRef<HTMLDivElement | null>(null)
   containerRef: React.RefObject<HTMLElement | null>
   documentId: string
   isLoggedIn: boolean
   onHighlight?: (highlightId: string) => void
+  // Phase B: called when user clicks Comment — parent mounts InlineCommentWrite
+  onComment?: (anchor: AnnotationAnchor, selectionRect: DOMRect) => void
 }
 
 interface ToolbarPosition {
@@ -47,10 +41,12 @@ export default function SelectionToolbar({
   documentId,
   isLoggedIn,
   onHighlight,
+  onComment,
 }: SelectionToolbarProps) {
   const [visible, setVisible]           = useState(false)
   const [position, setPosition]         = useState<ToolbarPosition>({ top: 0, left: 0 })
   const [anchor, setAnchor]             = useState<AnnotationAnchor | null>(null)
+  const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null)
   const [saving, setSaving]             = useState(false)
   const [savedId, setSavedId]           = useState<string | null>(null)
   const [showLoginTip, setShowLoginTip] = useState(false)
@@ -65,6 +61,7 @@ export default function SelectionToolbar({
       setVisible(false)
       setAnchor(null)
       setSavedId(null)
+      setSelectionRect(null)
       return
     }
 
@@ -81,7 +78,7 @@ export default function SelectionToolbar({
     const rect = range.getBoundingClientRect()
     if (!rect.width && !rect.height) return
 
-    const toolbarWidth = toolbarRef.current?.offsetWidth ?? 220
+    const toolbarWidth = toolbarRef.current?.offsetWidth ?? 240
     const scrollY = window.scrollY
 
     setPosition({
@@ -95,9 +92,10 @@ export default function SelectionToolbar({
       ),
     })
 
-    // Run captureAnchor — result determines whether Highlight is enabled
+    // Run captureAnchor — result determines whether Highlight/Comment are enabled
     const captured = captureAnchor(sel)
     setAnchor(captured)
+    setSelectionRect(rect)
     setSavedId(null)
     setShowLoginTip(false)
     setVisible(true)
@@ -135,7 +133,6 @@ export default function SelectionToolbar({
       return
     }
 
-    // Already saved this selection
     if (savedId) return
 
     setSaving(true)
@@ -178,23 +175,38 @@ export default function SelectionToolbar({
     }
   }
 
+  // ── Comment action ────────────────────────────────────────
+  function handleComment() {
+    if (!anchor || !selectionRect) return
+
+    if (!isLoggedIn) {
+      setShowLoginTip(true)
+      return
+    }
+
+    // Dismiss toolbar — InlineCommentWrite will take over
+    setVisible(false)
+
+    // Fire event to parent with anchor + rect so it can position write box
+    onComment?.(anchor, selectionRect)
+  }
+
   if (!visible) return null
 
-  const highlightDisabled = !anchor || saving || !!savedId
+  const actionDisabled = !anchor || saving || !!savedId
 
   return (
     <div
       ref={toolbarRef}
       style={{ top: position.top, left: position.left }}
       className="fixed z-50 select-none"
-      // Prevent mousedown from collapsing the selection
       onMouseDown={(e) => e.preventDefault()}
     >
       {/* Login tooltip */}
       {showLoginTip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap bg-stone-800 text-white text-xs font-['Inter'] px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5">
           <LogIn size={11} />
-          Log in to save highlights
+          Log in to save
           <a
             href="/login"
             className="underline underline-offset-2 text-amber-300 hover:text-amber-200"
@@ -210,7 +222,7 @@ export default function SelectionToolbar({
         {/* Highlight */}
         <button
           onClick={handleHighlight}
-          disabled={highlightDisabled}
+          disabled={actionDisabled}
           title={
             !anchor
               ? 'Select text within a single paragraph to highlight'
@@ -223,7 +235,7 @@ export default function SelectionToolbar({
             transition-all
             ${savedId
               ? 'bg-amber-50 text-amber-700'
-              : highlightDisabled
+              : actionDisabled
               ? 'text-stone-300 cursor-not-allowed'
               : 'text-stone-600 hover:bg-amber-50 hover:text-amber-700'}
           `}
@@ -238,11 +250,22 @@ export default function SelectionToolbar({
 
         <div className="w-px h-4 bg-stone-100" />
 
-        {/* Comment — Phase B placeholder */}
+        {/* Comment — Phase B: now live */}
         <button
-          onClick={() => {/* Phase B */}}
-          title="Comment (coming in Phase B)"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-['Inter'] text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition-colors"
+          onClick={handleComment}
+          disabled={!anchor}
+          title={
+            !anchor
+              ? 'Select text within a single paragraph to comment'
+              : 'Leave a reaction'
+          }
+          className={`
+            flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-['Inter']
+            transition-colors
+            ${!anchor
+              ? 'text-stone-300 cursor-not-allowed'
+              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-800'}
+          `}
         >
           <MessageCircle size={12} />
           Comment
@@ -250,10 +273,14 @@ export default function SelectionToolbar({
 
         <div className="w-px h-4 bg-stone-100" />
 
-        {/* Bookmark — Phase C placeholder */}
+        {/* Bookmark — handled by ReadingHeader; this pill just gives discoverability */}
         <button
-          onClick={() => {/* Phase C */}}
-          title="Bookmark (coming in Phase C)"
+          onClick={() => {
+            // Bookmark is at the chapter level — the header icon handles it.
+            // Dismiss toolbar and let user find the header icon.
+            setVisible(false)
+          }}
+          title="Use the bookmark icon in the reading header"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-['Inter'] text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition-colors"
         >
           <Bookmark size={12} />

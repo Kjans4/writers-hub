@@ -9,12 +9,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
 
   let body: { content: string }
   try {
@@ -35,9 +36,12 @@ export async function PATCH(
   // RLS "inline_comments_update_own" policy enforces user_id = auth.uid()
   const { data, error } = await supabase
     .from('inline_comments')
-    .update({ content: content.trim() })
-    .eq('id', params.id)
-    .eq('user_id', user.id)     // belt-and-suspenders on top of RLS
+    .update({
+      content:    content.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)   // belt-and-suspenders on top of RLS
     .select('id, content, updated_at')
     .single()
 
