@@ -1,5 +1,5 @@
 // components/story/StoryPage.tsx
-// Phase A update: adds GenreBadge and full TagList to the story header.
+// Phase D update: adds RatingDisplay section below the chapter list.
 
 'use client'
 
@@ -8,6 +8,7 @@ import { PublishedStory, Profile, ContentRating, StoryStatus } from '@/lib/supab
 import CoverPlaceholder from '@/components/feed/CoverPlaceholder'
 import GenreBadge from '@/components/genre/GenreBadge'
 import TagList from '@/components/tag/TagList'
+import RatingDisplay from '@/components/rating/RatingDisplay'
 import { ArrowLeft, Lock } from 'lucide-react'
 
 interface PublishedChapter {
@@ -24,10 +25,10 @@ interface StoryPageProps {
   author:         Pick<Profile, 'username' | 'display_name' | 'avatar_url' | 'bio'> | null
   resumePosition: number | null
   isLoggedIn:     boolean
-  genreName:      string | null   // Phase A
-  genreSlug:      string | null   // Phase A
-  genreColor:     string | null   // Phase A
-  tags:           string[]        // Phase A
+  genreName:      string | null
+  genreSlug:      string | null
+  genreColor:     string | null
+  tags:           string[]
 }
 
 const RATING_LABELS: Record<ContentRating, string> = {
@@ -218,6 +219,14 @@ export default function StoryPage({
             </div>
           )}
         </section>
+
+        {/* Phase D — Community ratings */}
+        <RatingDisplay
+          ratingsScore={story.ratings_score ?? null}
+          ratingsCount={story.ratings_count ?? 0}
+          storyId={story.id}
+          isLoggedIn={isLoggedIn}
+        />
 
         {/* Author */}
         {author && (

@@ -1,8 +1,9 @@
 // components/feed/StoryCard.tsx
 // Story card used across home feed, genre pages, tag pages, search results.
-// Shows cover, title, author, genre badge, and up to 3 tag pills.
+// Phase D update: shows ★ score when ratings_count >= 5.
 
 import Link from 'next/link'
+import { Star } from 'lucide-react'
 import CoverPlaceholder from './CoverPlaceholder'
 import GenreBadge from '@/components/genre/GenreBadge'
 import TagList from '@/components/tag/TagList'
@@ -21,6 +22,9 @@ interface StoryCardProps {
     tag_names?:      string[]
     author_name?:    string | null
     author_username?: string | null
+    // Phase D — optional, not all call sites pass these yet
+    ratings_score?:  number | null
+    ratings_count?:  number
   }
 }
 
@@ -29,7 +33,14 @@ const STATUS_BADGE: Record<string, string> = {
   hiatus:    'bg-amber-500 text-white',
 }
 
+const MIN_RATINGS_TO_SHOW = 5
+
 export default function StoryCard({ story }: StoryCardProps) {
+  const showRating =
+    story.ratings_count != null &&
+    story.ratings_count >= MIN_RATINGS_TO_SHOW &&
+    story.ratings_score != null
+
   return (
     <Link href={`/story/${story.slug}`} className="group flex flex-col">
 
@@ -50,6 +61,16 @@ export default function StoryCard({ story }: StoryCardProps) {
           <div className="absolute top-2 right-2">
             <span className={`text-xs px-2 py-0.5 rounded-full font-['Inter'] capitalize ${STATUS_BADGE[story.status]}`}>
               {story.status}
+            </span>
+          </div>
+        )}
+
+        {/* Star rating badge — bottom left of cover */}
+        {showRating && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full">
+            <Star size={10} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+            <span className="text-xs text-white font-['Inter'] font-medium">
+              {story.ratings_score!.toFixed(1)}
             </span>
           </div>
         )}

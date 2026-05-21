@@ -1,12 +1,14 @@
 // app/(reading)/story/[slug]/chapter/[number]/page.tsx
-// Chapter reading page. Stays a Server Component for data fetching.
-// Mounts ReadingHeader directly and renders chapter prose.
+// Phase D update: fetches completed chapter count + reader's existing rating,
+// mounts RatingPrompt below chapter navigation when completedCount >= 3.
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import ReadingHeader from '@/components/reader/ReadingHeader'
+import ChapterAnnotationShell from '@/components/reader/ChapterAnnotationShell'
+import RatingPrompt from '@/components/rating/RatingPrompt'
 
 interface ChapterReadPageProps {
   params: Promise<{ slug: string; number: string }>
@@ -14,8 +16,7 @@ interface ChapterReadPageProps {
 
 export default async function ChapterReadPage({ params }: ChapterReadPageProps) {
   const supabase = await createClient()
-  
-  // Resolve params as a Promise for Next.js 15 forward-compatibility (Issue I)
+
   const resolvedParams = await params
   const position = parseInt(resolvedParams.number, 10)
   if (isNaN(position) || position < 1) notFound()
@@ -58,24 +59,60 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
   const prevPosition = position > 1 ? position - 1 : null
   const nextPosition = position < allChapters.length ? position + 1 : null
 
-  // Update reading progress + resolve auth status for header
+  // Auth + reading progress
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Track completed chapter + update reading progress
+  let completedCount = 0
+  let existingRating = null
+
   if (user) {
+    // Upsert reading progress
     await supabase
       .from('reading_progress')
-      .upsert({
-        user_id: user.id,
-        published_story_id: story.id,
-        current_document_id: chapter.id,
-        last_read_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,published_story_id' })
+      .upsert(
+        {
+          user_id:             user.id,
+          published_story_id:  story.id,
+          current_document_id: chapter.id,
+          last_read_at:        new Date().toISOString(),
+        },
+        { onConflict: 'user_id,published_story_id' }
+      )
+
+    // Mark this chapter as completed (ignore duplicate errors)
+    await supabase
+      .from('completed_chapters')
+      .upsert(
+        { user_id: user.id, document_id: chapter.id },
+        { onConflict: 'user_id,document_id', ignoreDuplicates: true }
+      )
+
+    // Count completed chapters for this story
+    const publishedIds = allChapters.map((c) => c.id)
+    const { count } = await supabase
+      .from('completed_chapters')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .in('document_id', publishedIds)
+
+    completedCount = count ?? 0
+
+    // Fetch the reader's existing rating (for RatingPrompt dismissed_count check)
+    if (completedCount >= 3) {
+      const { data: ratingRow } = await supabase
+        .from('ratings')
+        .select('prose, plot, characters, pacing, world, dismissed_count')
+        .eq('user_id', user.id)
+        .eq('published_story_id', story.id)
+        .maybeSingle()
+
+      existingRating = ratingRow ?? null
+    }
   }
 
   return (
     <div className="min-h-screen bg-[#faf9f7] flex flex-col">
-      {/* CRITICAL FIX (Issue A): ReadingHeader mounts directly at the top of the return tree.
-        Uses chapter.id directly as the documentId constraint.
-      */}
       <ReadingHeader
         storyTitle={story.title}
         storySlug={story.slug}
@@ -85,10 +122,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
         isLoggedIn={!!user}
       />
 
-      {/* Main content wrapper with 'pt-24' to offset the sticky top-0 ReadingHeader 
-        and prevent visual content clipping (Issue H).
-      */}
-      <div className="flex-1 max-w-170 mx-auto px-6 pt-24 pb-12 w-full">
+      <div className="flex-1 max-w-[680px] mx-auto px-6 pt-24 pb-12 w-full">
 
         {/* Back to story */}
         <div className="mb-8">
@@ -101,7 +135,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </Link>
         </div>
 
-        {/* Chapter title header */}
+        {/* Chapter title */}
         <div className="mb-10">
           <p className="text-xs text-stone-400 font-['Inter'] uppercase tracking-wider mb-2">
             Chapter {position}
@@ -111,12 +145,11 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </h1>
         </div>
 
-        {/* CRITICAL FIX (Issue A): Bypassed non-existent ChapterAnnotationShell wrapper.
-          Render prose directly using standard dangerouslySetInnerHTML wrapper.
-        */}
-        <div 
-          className="prose prose-stone lg:prose-lg focus:outline-none dark:prose-invert font-serif text-stone-800 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: chapter.content ?? '' }}
+        {/* Chapter prose + annotation layers */}
+        <ChapterAnnotationShell
+          documentId={chapter.id}
+          isLoggedIn={!!user}
+          chapterHtml={chapter.content ?? ''}
         />
 
         {/* Chapter navigation */}
@@ -147,6 +180,16 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
             </div>
           )}
         </div>
+
+        {/* Phase D — Rating prompt (inline, no modal) */}
+        {user && (
+          <RatingPrompt
+            storyId={story.id}
+            completedCount={completedCount}
+            existingRating={existingRating}
+          />
+        )}
+
       </div>
     </div>
   )
