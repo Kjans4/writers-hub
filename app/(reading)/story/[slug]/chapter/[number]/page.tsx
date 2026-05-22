@@ -1,6 +1,6 @@
 // app/(reading)/story/[slug]/chapter/[number]/page.tsx
-// Phase D update: fetches completed chapter count + reader's existing rating,
-// mounts RatingPrompt below chapter navigation when completedCount >= 3.
+// Phase E update: mounts TipSection below chapter navigation.
+// Also fetches author display name for the tip section.
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import ReadingHeader from '@/components/reader/ReadingHeader'
 import ChapterAnnotationShell from '@/components/reader/ChapterAnnotationShell'
 import RatingPrompt from '@/components/rating/RatingPrompt'
+import TipSection from '@/components/ink/TipSection'
 
 interface ChapterReadPageProps {
   params: Promise<{ slug: string; number: string }>
@@ -59,10 +60,21 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
   const prevPosition = position > 1 ? position - 1 : null
   const nextPosition = position < allChapters.length ? position + 1 : null
 
-  // Auth + reading progress
+  // Fetch author display name for TipSection
+  const { data: authorProfile } = await supabase
+    .from('profiles')
+    .select('display_name, username')
+    .eq('id', story.user_id)
+    .single()
+
+  const authorName =
+    authorProfile?.display_name ??
+    authorProfile?.username ??
+    'the author'
+
+  // Auth + reading progress + ratings data
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Track completed chapter + update reading progress
   let completedCount = 0
   let existingRating = null
 
@@ -80,7 +92,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
         { onConflict: 'user_id,published_story_id' }
       )
 
-    // Mark this chapter as completed (ignore duplicate errors)
+    // Mark chapter completed
     await supabase
       .from('completed_chapters')
       .upsert(
@@ -98,7 +110,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
 
     completedCount = count ?? 0
 
-    // Fetch the reader's existing rating (for RatingPrompt dismissed_count check)
+    // Fetch existing rating for RatingPrompt
     if (completedCount >= 3) {
       const { data: ratingRow } = await supabase
         .from('ratings')
@@ -181,7 +193,15 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           )}
         </div>
 
-        {/* Phase D — Rating prompt (inline, no modal) */}
+        {/* Phase E — Tip section (below nav, above rating) */}
+        <TipSection
+          storyId={story.id}
+          documentId={chapter.id}
+          authorName={authorName}
+          isLoggedIn={!!user}
+        />
+
+        {/* Phase D — Rating prompt */}
         {user && (
           <RatingPrompt
             storyId={story.id}

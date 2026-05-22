@@ -1,14 +1,11 @@
 // proxy.ts
 // Next.js 16+ uses proxy.ts instead of middleware.ts.
-// Whitelists public reader routes so unauthenticated users can browse
-// stories, author profiles, and the home feed.
-// Auth-required routes (dashboard, project editor, library) redirect to /login.
+// Phase E update: adds /shop to PUBLIC_PREFIXES.
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes accessible without a login session.
-// Prefix matching — any path that starts with one of these is public.
 const PUBLIC_PREFIXES = [
   '/story/',
   '/author/',
@@ -18,7 +15,7 @@ const PUBLIC_PREFIXES = [
   '/genre/',
   '/tag/',
   '/search',
-  '/shop',   // Ink shop — publicly browsable, Buy requires login
+  '/shop',   // Phase E — Ink shop is publicly browsable
 ]
 
 function isPublicPath(pathname: string): boolean {
@@ -57,14 +54,12 @@ export async function proxy(request: NextRequest) {
   const isAuth   = pathname.startsWith('/login') || pathname.startsWith('/signup')
   const isPublic = isPublicPath(pathname)
 
-  // Not logged in, trying to access a protected route → send to login
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Logged in, hitting an auth page → send to dashboard
   if (user && isAuth) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
