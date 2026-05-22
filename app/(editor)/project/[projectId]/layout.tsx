@@ -1,4 +1,5 @@
 // app/(editor)/project/[projectId]/layout.tsx
+// Navigation fix: added Globe → /home link in top chrome bar.
 // Three-panel editor shell. Wraps all project sub-routes.
 // Auth-gated via (editor)/layout.tsx above it.
 
@@ -17,6 +18,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Home,
+  Globe,
 } from 'lucide-react'
 
 export default function ProjectLayout({
@@ -71,12 +73,22 @@ export default function ProjectLayout({
             {leftPanelOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
 
+          {/* Dashboard link */}
           <button
             onClick={() => router.push('/dashboard')}
             className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition-colors"
             title="Dashboard"
           >
             <Home size={15} />
+          </button>
+
+          {/* Reader home link — navigation fix */}
+          <button
+            onClick={() => router.push('/home')}
+            className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition-colors"
+            title="Reader view"
+          >
+            <Globe size={15} />
           </button>
 
           <div className="w-px h-4 bg-stone-200" />

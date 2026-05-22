@@ -1,13 +1,14 @@
 // components/reader/ReadingHeader.tsx
-// Navigation bar shown at the top of every chapter reading page.
-// Renders inside app/(reading)/layout.tsx which has NO ReaderNav,
-// so this is the only sticky element on the page.
+// Navigation fix: added minimal nav strip above the chapter header.
+// Strip links: Home (logo), Library, Write for logged-in users.
+// Logged-out users see a Log in link instead.
 
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bookmark, ArrowLeft, Check, List } from 'lucide-react'
+import Link from 'next/link'
+import { Bookmark, ArrowLeft, Check, List, BookOpen } from 'lucide-react'
 
 interface ReadingHeaderProps {
   storyTitle:    string
@@ -16,7 +17,7 @@ interface ReadingHeaderProps {
   totalChapters: number
   documentId:    string
   isLoggedIn:    boolean
-  onToggleTOC?:  () => void  // reserved for future table-of-contents panel
+  onToggleTOC?:  () => void
 }
 
 export default function ReadingHeader({
@@ -35,17 +36,15 @@ export default function ReadingHeader({
   const [toast, setToast]                     = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Clean up timer on component unmount to prevent memory leaks/state updates on unmounted surfaces
   useEffect(() => {
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current)
     }
   }, [])
 
-  // ── Fetch initial bookmark status on mount ────────────────
+  // Fetch initial bookmark status
   useEffect(() => {
     if (!isLoggedIn) return
-
     async function check() {
       try {
         const res = await fetch(`/api/bookmarks/${documentId}`)
@@ -53,14 +52,13 @@ export default function ReadingHeader({
         const json = await res.json()
         setBookmarked(json.bookmarked)
       } catch {
-        // Non-fatal — icon stays in default state
+        // Non-fatal
       }
     }
-
     check()
   }, [documentId, isLoggedIn])
 
-  // ── Optimistic bookmark toggle ────────────────────────────
+  // Optimistic bookmark toggle
   async function handleBookmark() {
     if (!isLoggedIn) {
       router.push('/login')
@@ -73,12 +71,10 @@ export default function ReadingHeader({
 
     try {
       const res = await fetch(`/api/bookmarks/${documentId}`, { method: 'POST' })
-
       if (!res.ok) {
-        setBookmarked(wasBookmarked)  // roll back
+        setBookmarked(wasBookmarked)
         return
       }
-
       const json = await res.json()
       setBookmarked(json.bookmarked)
       showToast(
@@ -87,7 +83,7 @@ export default function ReadingHeader({
           : 'Bookmark removed'
       )
     } catch {
-      setBookmarked(wasBookmarked)  // roll back on network error
+      setBookmarked(wasBookmarked)
     } finally {
       setBookmarkLoading(false)
     }
@@ -101,7 +97,52 @@ export default function ReadingHeader({
 
   return (
     <>
-      <header className="sticky top-0 left-0 w-full z-20 bg-white/95 backdrop-blur-sm border-b border-stone-200">
+      {/* ── Minimal nav strip (navigation fix) ───────────────── */}
+      <div className="sticky top-0 left-0 w-full z-30 bg-white/95 backdrop-blur-sm border-b border-stone-100">
+        <div className="max-w-3xl mx-auto px-6 h-9 flex items-center justify-between">
+
+          {/* Logo → home */}
+          <Link
+            href="/home"
+            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 transition-colors"
+          >
+            <BookOpen size={13} className="text-amber-500" />
+            <span className="text-xs font-medium font-['Inter'] tracking-tight">
+              Writer's Hub
+            </span>
+          </Link>
+
+          {/* Right links */}
+          <div className="flex items-center gap-3">
+            {isLoggedIn ? (
+              <>
+                <Link
+                  href="/library"
+                  className="text-xs text-stone-400 hover:text-stone-700 font-['Inter'] transition-colors"
+                >
+                  Library
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="text-xs text-stone-400 hover:text-stone-700 font-['Inter'] transition-colors"
+                >
+                  Write
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="text-xs text-stone-400 hover:text-stone-700 font-['Inter'] transition-colors"
+              >
+                Log in
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Chapter header (existing) ─────────────────────────── */}
+      <header className="sticky top-9 left-0 w-full z-20 bg-white/95 backdrop-blur-sm border-b border-stone-200">
         <div className="max-w-3xl mx-auto px-6 h-12 flex items-center gap-3">
 
           {/* Back to story info page */}
@@ -148,7 +189,7 @@ export default function ReadingHeader({
               />
             </button>
 
-            {/* Table of contents — renders only if parent passes the handler */}
+            {/* Table of contents */}
             {onToggleTOC && (
               <button
                 onClick={onToggleTOC}
