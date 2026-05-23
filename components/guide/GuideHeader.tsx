@@ -1,44 +1,58 @@
 // components/guide/GuideHeader.tsx
-// Simple standalone header for guide pages.
-// No login/avatar — just branding and a back link.
-
-'use client'
+// Sticky top bar shown on all guide pages.
+// Shows the Writer's Hub logo + a back link to the guide index.
+// Used by both the index page and individual guide pages.
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { BookOpen, ArrowLeft } from 'lucide-react'
+import { ArrowLeft, BookOpen } from 'lucide-react'
 
 interface GuideHeaderProps {
-  title: string
+  title?: string
+  showBack?: boolean
 }
 
-export default function GuideHeader({ title }: GuideHeaderProps) {
-  const router = useRouter()
-
+export default function GuideHeader({
+  title,
+  showBack = true,
+}: GuideHeaderProps) {
   return (
-    <header className="border-b border-stone-200 bg-white/90 backdrop-blur-sm sticky top-0 z-10">
-      <div className="max-w-3xl mx-auto px-6 h-12 flex items-center justify-between">
+    <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-stone-200">
+      <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
 
-        {/* Back link */}
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-stone-400 hover:text-stone-600 text-sm font-['Inter'] transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Back
-        </button>
+        {/* Left: back link or logo */}
+        <div className="flex items-center gap-3">
+          {showBack ? (
+            <Link
+              href="/guide"
+              className="flex items-center gap-1.5 text-stone-400 hover:text-stone-600 text-sm font-['Inter'] transition-colors"
+            >
+              <ArrowLeft size={14} />
+              All guides
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <BookOpen size={15} className="text-amber-500" />
+              <span className="font-serif text-stone-600 text-sm">
+                Writer's Hub
+              </span>
+            </div>
+          )}
+        </div>
 
-        {/* Branding */}
+        {/* Right: page title (optional) */}
+        {title && (
+          <span className="text-xs text-stone-400 font-['Inter'] hidden sm:block truncate max-w-[200px]">
+            {title}
+          </span>
+        )}
+
+        {/* Right: dashboard link */}
         <Link
-          href="/home"
-          className="flex items-center gap-1.5 text-stone-600 hover:text-stone-800 transition-colors"
+          href="/dashboard"
+          className="text-xs text-stone-400 hover:text-stone-600 font-['Inter'] transition-colors"
         >
-          <BookOpen size={15} className="text-amber-500" />
-          <span className="font-serif text-sm text-stone-700">Writer's Hub</span>
+          Dashboard →
         </Link>
-
-        {/* Spacer to balance the back button */}
-        <div className="w-16" />
       </div>
     </header>
   )

@@ -1,6 +1,7 @@
-// app/(reader)/guide/page.tsx
-// Guide index — lists all available guides.
-// Uses the standalone GuideHeader (no ReaderNav).
+// app/(app)/guide/page.tsx
+// Guide index — lists all three guides as cards.
+// Protected by (app) layout — requires login.
+// Accessible from the dashboard or any guide's "All guides" back link.
 
 import { getAllGuides } from '@/lib/guides'
 import GuideCard from '@/components/guide/GuideCard'
@@ -8,8 +9,9 @@ import GuideHeader from '@/components/guide/GuideHeader'
 import { BookOpen } from 'lucide-react'
 
 export const metadata = {
-  title: 'Guides — Writer\'s Hub',
-  description: 'Learn how to use Writer\'s Hub to write, organize, and publish your story.',
+  title: "Guides — Writer's Hub",
+  description:
+    "Learn how to use Writer's Hub to write, organize, and build your story's world.",
 }
 
 export default function GuidesIndexPage() {
@@ -17,7 +19,7 @@ export default function GuidesIndexPage() {
 
   return (
     <div className="min-h-screen bg-[#faf9f7]">
-      <GuideHeader title="Guides" />
+      <GuideHeader showBack={false} />
 
       <main className="max-w-3xl mx-auto px-6 py-12">
 
@@ -26,16 +28,14 @@ export default function GuidesIndexPage() {
           <div className="p-2 bg-amber-50 rounded-xl border border-amber-100">
             <BookOpen size={18} className="text-amber-600" />
           </div>
-          <div>
-            <h1 className="font-serif text-2xl text-stone-800">
-              How Writer's Hub works
-            </h1>
-          </div>
+          <h1 className="font-serif text-2xl text-stone-800">
+            How Writer's Hub works
+          </h1>
         </div>
 
         <p className="text-stone-400 font-['Inter'] text-sm leading-relaxed mb-10 ml-14">
-          Three short guides covering navigation, the editor, and the world-building system.
-          Read them in order or jump to what you need.
+          Three short guides covering navigation, the editor, and the
+          world-building system. Read them in order or jump to what you need.
         </p>
 
         {/* Guide cards */}
@@ -43,7 +43,7 @@ export default function GuidesIndexPage() {
           {guides.map((guide, i) => (
             <div key={guide.slug} className="flex gap-4 items-start">
               {/* Step number */}
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center mt-0.5">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center mt-1">
                 <span className="text-xs font-semibold text-stone-500 font-['Inter']">
                   {i + 1}
                 </span>
@@ -55,6 +55,18 @@ export default function GuidesIndexPage() {
           ))}
         </div>
 
+        {/* Footer link back to dashboard */}
+        <div className="mt-12 text-center">
+          <p className="text-xs text-stone-300 font-['Inter']">
+            Questions?{' '}
+            <a
+              href="mailto:support@writershub.app"
+              className="text-stone-400 hover:text-stone-600 underline underline-offset-2 transition-colors"
+            >
+              Get in touch
+            </a>
+          </p>
+        </div>
       </main>
     </div>
   )
