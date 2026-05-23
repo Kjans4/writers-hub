@@ -2,6 +2,7 @@
 // Client component for the project index page.
 // Shows the empty state with a "Publish Story" or "Manage Publishing" CTA
 // depending on whether the project has been published.
+// FIX: corrected router.push paths from /publish/[id] to /project/[id]/publish
 
 'use client'
 
@@ -42,7 +43,7 @@ export default function ProjectIndexClient({
         <div className="border-t border-stone-100 pt-6">
           {!publishedStory ? (
             <button
-              onClick={() => router.push(`/publish/${projectId}`)}
+              onClick={() => router.push(`/project/${projectId}/publish`)}
               className="flex items-center gap-2 mx-auto px-4 py-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-sm font-medium rounded-xl font-['Inter'] transition-colors"
             >
               <Globe size={14} />
@@ -65,7 +66,7 @@ export default function ProjectIndexClient({
                   View story
                 </button>
                 <button
-                  onClick={() => router.push(`/publish/${projectId}`)}
+                  onClick={() => router.push(`/project/${projectId}/publish`)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-600 text-xs font-medium rounded-lg font-['Inter'] transition-colors"
                 >
                   <Settings size={12} />
