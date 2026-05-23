@@ -1,21 +1,23 @@
 // app/(reader)/home/page.tsx
 // Phase A update: genre pill row + ?genre filter.
+// Guides update: small GuideRow pinned above genre pills.
 
 import { createClient } from '@/lib/supabase/server'
 import { Suspense } from 'react'
 import { BookOpen } from 'lucide-react'
 import StoryCard from '@/components/feed/StoryCard'
 import GenrePillRow from '@/components/genre/GenrePillRow'
+import GuideRow from '@/components/guide/GuideRow'
+import { getAllGuides } from '@/lib/guides'
 import { Genre } from '@/lib/supabase/types'
 
 interface HomePageProps {
-  searchParams: Promise<{ genre?: string }>
+  searchParams: { genre?: string }
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const supabase       = await createClient()
-  const { genre }      = await searchParams
-  const activeGenreSlug = genre ?? ''
+  const activeGenreSlug = searchParams.genre ?? ''
 
   // All genres for pill row
   const { data: genres } = await supabase
@@ -89,8 +91,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     ? (genres ?? []).find((g: Genre) => g.slug === activeGenreSlug)?.name ?? 'Stories'
     : 'Stories'
 
+  // Load guide metadata server-side
+  const guides = getAllGuides()
+
   return (
     <main className="max-w-5xl mx-auto px-6 py-10">
+
+      {/* Guides row — pinned above genre pills */}
+      <GuideRow guides={guides} />
 
       {/* Genre pill row — Suspense required because GenrePillRow uses useSearchParams */}
       <div className="mb-8">
