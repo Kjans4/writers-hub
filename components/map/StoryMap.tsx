@@ -1,4 +1,10 @@
 // components/map/StoryMap.tsx
+// FIX BUG-004: Tooltip Appearing at Wrong Position
+//   `onNodeHover` was storing the node's raw force-simulation x/y coordinates
+//   (typically −300 to +300 from the graph centre) directly as CSS pixel
+//   positions. This placed the tooltip far outside the visible canvas.
+//   Fixed by converting graph coordinates to screen coordinates via
+//   `graphRef.current.graph2ScreenCoords(node.x, node.y)` before storing them.
 
 'use client'
 
@@ -11,10 +17,9 @@ import MapLegend from './MapLegend'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { DocumentType } from '@/lib/supabase/types'
 
-// 1. Cast to any and ensure ssr is false
 const ForceGraph2D = dynamic(
-  () => import('react-force-graph-2d').then((mod) => mod.default), // Note: .default for this package
-  { 
+  () => import('react-force-graph-2d').then((mod) => mod.default),
+  {
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center h-full">
@@ -53,7 +58,6 @@ export default function StoryMap({
       return
     }
 
-    // Guard against server-side execution
     if (typeof window === 'undefined') return
 
     function measure() {
@@ -65,9 +69,7 @@ export default function StoryMap({
       }
     }
 
-    // Small timeout ensures the DOM has painted before we measure
     const timer = setTimeout(measure, 100)
-    
     window.addEventListener('resize', measure)
     return () => {
       window.removeEventListener('resize', measure)
@@ -122,7 +124,7 @@ export default function StoryMap({
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillStyle = node.type === 'chapter' ? '#1c1917' : '#57534e'
-        
+
         const label = node.name || 'Untitled'
         ctx.fillText(
           label.length > 18 ? label.slice(0, 16) + '…' : label,
@@ -173,12 +175,21 @@ export default function StoryMap({
           nodeCanvasObjectMode={() => 'replace'}
           onNodeClick={handleNodeClick}
           onNodeHover={(node: any) => {
-            if (node && typeof node.x === 'number') {
+            if (!node) {
+              setTooltip(null)
+              return
+            }
+
+            // FIX BUG-004: node.x / node.y are force-simulation graph coordinates,
+            // not screen pixels. Convert to screen coordinates first so the tooltip
+            // actually appears next to the hovered node on the canvas.
+            if (graphRef.current && typeof node.x === 'number' && typeof node.y === 'number') {
+              const screenCoords = graphRef.current.graph2ScreenCoords(node.x, node.y)
               setTooltip({
                 name: node.name,
                 type: node.type,
-                x: node.x,
-                y: node.y,
+                x: screenCoords.x,
+                y: screenCoords.y,
               })
             } else {
               setTooltip(null)
@@ -201,7 +212,9 @@ export default function StoryMap({
         <div
           className="absolute z-20 pointer-events-none px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg shadow-md transition-opacity"
           style={{
-            // Use screen coordinates if available, otherwise fallback
+            // FIX BUG-004: these are now true screen-space pixel coordinates
+            // returned by graph2ScreenCoords(), so the tooltip renders correctly
+            // next to the hovered node regardless of pan/zoom level.
             left: Math.min(tooltip.x + 16, dims.width - 150),
             top: Math.max(tooltip.y - 36, 8),
           }}
