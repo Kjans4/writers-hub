@@ -1,4 +1,16 @@
 // lib/hooks/useBranch.ts
+// FIX BUG-007: Forked Branch Link Filter Allows Unmapped Endpoints
+//   When forking, Canon links were copied with remapped document IDs.
+//   The filter was only checking `source_doc_id !== target_doc_id` (self-links),
+//   but NOT checking whether both endpoints were actually present in the idMap.
+//   If the batch document insert partially failed, some Canon IDs would have no
+//   mapping — those links would silently carry over Canon document IDs into the
+//   new branch, corrupting the story map with broken cross-branch connections.
+//
+//   Fix: the filter now requires BOTH source and target to exist in idMap
+//   before including a link in the new branch, in addition to the existing
+//   self-link guard.
+//
 // Manages branches for a project:
 //   - getBranches: fetch all branches for a project
 //   - createBranch: fork — copies all Canon documents to new UUIDs,
@@ -73,20 +85,15 @@ export function useBranch() {
       //    Build old → new ID mapping as we go
       const idMap = new Map<string, string>()
 
-      const newDocs = canonDocs.map((doc: Document) => {
-        // We need to generate new IDs client-side for the mapping
-        // Supabase will assign real UUIDs; we use a temp approach:
-        // insert one by one to capture each new ID
-        return {
-          project_id: projectId,
-          branch_id: branch.id,
-          type: doc.type,
-          title: doc.title,
-          content: doc.content,
-          metadata: doc.metadata,
-          order_index: doc.order_index,
-        }
-      })
+      const newDocs = canonDocs.map((doc: Document) => ({
+        project_id:  projectId,
+        branch_id:   branch.id,
+        type:        doc.type,
+        title:       doc.title,
+        content:     doc.content,
+        metadata:    doc.metadata,
+        order_index: doc.order_index,
+      }))
 
       // Insert all new docs in one batch
       const { data: insertedDocs, error: insertError } = await supabase
@@ -113,16 +120,26 @@ export function useBranch() {
       if (canonLinks && canonLinks.length > 0) {
         const newLinks = canonLinks
           .map((link: any) => ({
-            project_id: projectId,
-            branch_id: branch.id,
-            source_doc_id: idMap.get(link.source_doc_id) ?? link.source_doc_id,
-            target_doc_id: idMap.get(link.target_doc_id) ?? link.target_doc_id,
+            project_id:    projectId,
+            branch_id:     branch.id,
+            source_doc_id: idMap.get(link.source_doc_id),
+            target_doc_id: idMap.get(link.target_doc_id),
           }))
-          .filter(
-            (l: any) =>
-              // Only include links where both endpoints were successfully remapped
+          .filter((l: any) => {
+            // FIX BUG-007: the old filter only guarded against self-links
+            // (`source !== target`). It did NOT verify that both endpoints
+            // were successfully remapped, so a partial insert failure could
+            // leave Canon document IDs in the new branch's link rows.
+            //
+            // Now we require:
+            //   1. Both source and target resolved in idMap (not undefined)
+            //   2. The link is not a self-link
+            return (
+              l.source_doc_id !== undefined &&
+              l.target_doc_id !== undefined &&
               l.source_doc_id !== l.target_doc_id
-          )
+            )
+          })
 
         if (newLinks.length > 0) {
           await supabase.from('links').insert(newLinks)
