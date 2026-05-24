@@ -1,4 +1,16 @@
 // components/library/AddToListDropdown.tsx
+// FIX BUG-002: Wrong API path — `/api/api/lists/...` → `/api/lists/...`
+//   The DELETE call for removing a story from a list had a double `/api/api/`
+//   prefix, causing every removal to 404 and silently revert after the
+//   optimistic UI update.
+//
+// FIX BUG-003: Membership check always returned false
+//   `resolveItemMemberships` fetched `/api/lists` (the list index) instead of
+//   `/api/lists/${list.id}/items`, then returned `has_story: false`
+//   unconditionally regardless of the response. Checkmarks never appeared.
+//   Fixed by fetching the correct endpoint and checking whether `storyId`
+//   appears in the returned items array.
+
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -19,7 +31,7 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
   const [isOpen, setIsOpen] = useState(false)
   const [lists, setLists] = useState<ReadingList[]>([])
   const [loading, setLoading] = useState(false)
-  
+
   // Creation States
   const [isCreating, setIsCreating] = useState(false)
   const [newListName, setNewListName] = useState('')
@@ -40,49 +52,42 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Fetch lists and cross reference membership statuses
+  // Fetch lists and cross-reference membership statuses
   async function fetchListData() {
     if (!isLoggedIn) return
     setLoading(true)
     try {
-      // 1. Fetch user lists
+      // 1. Fetch all user lists
       const res = await fetch('/api/lists')
       if (!res.ok) throw new Error()
       const data = await res.json()
 
-      // 2. Fetch lists that already contain this story to cross-reference checkmarks
-      // We leverage the SELECT policy on reading_list_items to extract current attachments
-      const attachedRes = await fetch(`/api/lists`) // Handled on global mapping query or local map
-      
-      setLists(data.lists.map((list: any) => ({
-        id: list.id,
-        name: list.name,
-        has_story: false // Default to false, resolved via state check below
-      })))
-      
-      // Let's check matching mappings via item verification
-      resolveItemMemberships(data.lists)
+      // 2. For each list, fetch its items and check if storyId is present
+      // FIX BUG-003: was fetching '/api/lists' (wrong endpoint) and always
+      // returning has_story: false. Now fetches the correct items endpoint
+      // and checks the returned array for the current storyId.
+      const listsWithMembership = await Promise.all(
+        (data.lists ?? []).map(async (list: any) => {
+          try {
+            const itemRes = await fetch(`/api/lists/${list.id}/items`)
+            if (!itemRes.ok) return { ...list, has_story: false }
+            const itemData = await itemRes.json()
+            const has_story = (itemData.items ?? []).some(
+              (item: any) => item.story_id === storyId
+            )
+            return { ...list, has_story }
+          } catch {
+            return { ...list, has_story: false }
+          }
+        })
+      )
+
+      setLists(listsWithMembership)
     } catch (err) {
       console.error('Failed to load reading lists', err)
     } finally {
       setLoading(false)
     }
-  }
-
-  async function resolveItemMemberships(userLists: any[]) {
-    const updatedLists = await Promise.all(
-      userLists.map(async (list) => {
-        try {
-          // Send a rapid verification cross check to determine selection status
-          const check = await fetch(`/api/lists/${list.id}/items`)
-          // If our lookup matches item schema parameters, confirm checkbox state
-          return { ...list, has_story: false }
-        } catch {
-          return { ...list, has_story: false }
-        }
-      })
-    )
-    setLists(updatedLists)
   }
 
   useEffect(() => {
@@ -91,17 +96,18 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
     }
   }, [isOpen])
 
-  // Handle addition / removal toggle toggles
+  // Handle addition / removal toggle
   async function toggleStoryInList(listId: string, currentStatus: boolean) {
-    // Optimistic UI updates
+    // Optimistic UI update
     setLists(prev => prev.map(l => l.id === listId ? { ...l, has_story: !currentStatus } : l))
 
     try {
       if (currentStatus) {
-        // Already in list -> Remove it
-        await fetch(`/api/api/lists/${listId}/items/${storyId}`, { method: 'DELETE' })
+        // Already in list → Remove it
+        // FIX BUG-002: was `/api/api/lists/...` (double prefix), now correct path
+        await fetch(`/api/lists/${listId}/items/${storyId}`, { method: 'DELETE' })
       } else {
-        // Not in list -> Add it
+        // Not in list → Add it
         await fetch(`/api/lists/${listId}/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -109,12 +115,12 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
         })
       }
     } catch (err) {
-      // Revert on complete structural runtime failure
+      // Revert optimistic update on failure
       setLists(prev => prev.map(l => l.id === listId ? { ...l, has_story: currentStatus } : l))
     }
   }
 
-  // Handle creation inline
+  // Handle inline list creation
   async function handleCreateList(e: React.FormEvent) {
     e.preventDefault()
     if (!newListName.trim() || createLoading) return
@@ -129,16 +135,15 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
       if (!res.ok) throw new Error()
       const data = await res.json()
 
-      // Automatically attach story to newly minted collection list item
-      const newListObj: ReadingList = { id: data.list.id, name: data.list.name, has_story: true }
-      setLists(prev => [newListObj, ...prev])
-      
+      // Automatically add story to the newly created list
       await fetch(`/api/lists/${data.list.id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storyId })
       })
 
+      const newListObj: ReadingList = { id: data.list.id, name: data.list.name, has_story: true }
+      setLists(prev => [newListObj, ...prev])
       setNewListName('')
       setIsCreating(false)
     } catch (err) {
@@ -164,7 +169,7 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
             <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Select Reading Lists</span>
           </div>
 
-          {/* List Matrix Display */}
+          {/* List items */}
           <div className="max-h-48 overflow-y-auto p-1.5 space-y-0.5">
             {loading ? (
               <div className="flex items-center justify-center py-6 text-stone-400">
@@ -186,8 +191,8 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
                     <span className="truncate">{list.name}</span>
                   </div>
                   <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                    list.has_story 
-                      ? 'bg-stone-900 border-stone-900 text-white' 
+                    list.has_story
+                      ? 'bg-stone-900 border-stone-900 text-white'
                       : 'border-stone-300 group-hover:border-stone-400'
                   }`}>
                     {list.has_story && <Check size={11} strokeWidth={3} />}
@@ -197,7 +202,7 @@ export default function AddToListDropdown({ storyId, isLoggedIn }: AddToListDrop
             )}
           </div>
 
-          {/* Inline List Creator Drawer Row */}
+          {/* Inline list creator */}
           <div className="border-t border-stone-100 p-2 bg-stone-50/50">
             {isCreating ? (
               <form onSubmit={handleCreateList} className="flex items-center gap-1.5">
