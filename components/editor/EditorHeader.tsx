@@ -1,11 +1,18 @@
 // components/editor/EditorHeader.tsx
+// FIX BUG-005: Illegal setState During Render
+//   The previous code called `setLocalTitle(title)` directly in the component
+//   body (render phase) to sync the input when the parent title prop changed.
+//   This violates React's rules — setState during render causes a warning and
+//   can trigger infinite render loops on chapter switches. It also read
+//   `document.activeElement` during render which throws on the server (SSR).
+//   Fixed by moving the sync into a `useEffect` that depends on `title`.
+//
 // Updated for Phase 6: adds checkpoint button (Flag icon) and
 // timeline toggle button (Clock icon) to the header row.
-// Replace your existing components/editor/EditorHeader.tsx with this file.
 
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Focus, Minimize2, Flag, Clock } from 'lucide-react'
 
 interface EditorHeaderProps {
@@ -30,6 +37,16 @@ export default function EditorHeader({
   const [localTitle, setLocalTitle] = useState(title)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // FIX BUG-005: was called directly in the render body —
+  //   `if (localTitle !== title && document.activeElement !== inputRef.current) { setLocalTitle(title) }`
+  // Moved into a useEffect so it only runs after render, avoiding the
+  // illegal-setState-during-render violation and the SSR document access.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setLocalTitle(title)
+    }
+  }, [title])
+
   function handleBlur() {
     const trimmed = localTitle.trim()
     if (trimmed && trimmed !== title) {
@@ -47,11 +64,6 @@ export default function EditorHeader({
       setLocalTitle(title)
       inputRef.current?.blur()
     }
-  }
-
-  // Sync when parent title changes (chapter switch)
-  if (localTitle !== title && document.activeElement !== inputRef.current) {
-    setLocalTitle(title)
   }
 
   return (
