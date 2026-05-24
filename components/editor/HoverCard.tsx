@@ -1,4 +1,12 @@
 // components/editor/HoverCard.tsx
+// FIX BUG-009: Hover Card Flashes at Wrong Position Before Correcting
+//   The card was first rendered at `top: rect.top + scrollY - 8` (below the
+//   wikilink), then immediately repositioned above it after measuring its own
+//   height via a zero-delay setTimeout. This caused a visible jump on every
+//   hover because the browser painted the card at the wrong position first.
+//   Fixed by rendering with `visibility: hidden` until the height measurement
+//   is done, then making it visible at the correct final position in one paint.
+//
 // Hover card shown 400ms after hovering a wikilink node.
 // Listens to "wikilink:hover" and "wikilink:hoverout" DOM events.
 // Fetches entity metadata from Supabase and displays Quick Facts.
@@ -37,14 +45,19 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
   const router = useRouter()
   const supabase = createClient()
 
-  const [entity, setEntity] = useState<Document | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [visible, setVisible] = useState(false)
+  const [entity, setEntity]     = useState<Document | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const [visible, setVisible]   = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
+
+  // FIX BUG-009: track whether the card has been measured yet.
+  // The card renders with visibility:hidden until `measured` is true,
+  // so the user never sees it at the uncorrected position.
+  const [measured, setMeasured] = useState(false)
 
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cardRef = useRef<HTMLDivElement>(null)
+  const cardRef      = useRef<HTMLDivElement>(null)
 
   // ── Listen for hover events ───────────────────────────────
   useEffect(() => {
@@ -54,19 +67,20 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
         rect: DOMRect
       }
 
-      // Clear any pending hide
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
 
-      // Show after 400ms delay
       showTimerRef.current = setTimeout(async () => {
         setLoading(true)
+        // FIX BUG-009: reset measured so the card is hidden until repositioned
+        setMeasured(false)
         setVisible(true)
 
-        // Position: above the wikilink, left-aligned
         const cardWidth = 260
-        const scrollY = window.scrollY
+        const scrollY   = window.scrollY
+
+        // Initial horizontal position — will be corrected vertically once measured
         setPosition({
-          top: rect.top + scrollY - 8,
+          top:  rect.top + scrollY - 8,
           left: Math.max(
             8,
             Math.min(rect.left, window.innerWidth - cardWidth - 8)
@@ -85,7 +99,9 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
         setEntity(data as Document | null)
         setLoading(false)
 
-        // Reposition above after we know card height
+        // Now that content is known, measure the card height and move it above
+        // the wikilink. Only then flip visibility on so the user sees it appear
+        // already in the correct position — no jump.
         setTimeout(() => {
           if (cardRef.current) {
             const cardHeight = cardRef.current.offsetHeight
@@ -94,6 +110,8 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
               top: rect.top + scrollY - cardHeight - 8,
             }))
           }
+          // FIX BUG-009: make visible only after position is finalised
+          setMeasured(true)
         }, 0)
       }, 400)
     }
@@ -101,10 +119,10 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
     function handleHoverOut() {
       if (showTimerRef.current) clearTimeout(showTimerRef.current)
 
-      // Small grace period — lets mouse move to the card itself
       hideTimerRef.current = setTimeout(() => {
         setVisible(false)
         setEntity(null)
+        setMeasured(false)
       }, 200)
     }
 
@@ -126,12 +144,12 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
     hideTimerRef.current = setTimeout(() => {
       setVisible(false)
       setEntity(null)
+      setMeasured(false)
     }, 150)
   }
 
   if (!visible) return null
 
-  // Parse quick facts from metadata
   const quickFacts: Record<string, string> =
     (entity?.metadata as Record<string, string> | null) ?? {}
 
@@ -141,7 +159,14 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
   return (
     <div
       ref={cardRef}
-      style={{ top: position.top, left: position.left }}
+      style={{
+        top:        position.top,
+        left:       position.left,
+        // FIX BUG-009: hidden until measured so the card never flashes at the
+        // pre-measurement position. Transitions to visible in the same frame
+        // that the corrected top is applied.
+        visibility: measured ? 'visible' : 'hidden',
+      }}
       onMouseEnter={handleCardMouseEnter}
       onMouseLeave={handleCardMouseLeave}
       className="fixed z-50 w-64 bg-white border border-stone-200 rounded-xl shadow-xl overflow-hidden pointer-events-auto"
@@ -181,9 +206,7 @@ export default function HoverCard({ projectId, branchId }: HoverCardProps) {
             {/* Navigate to entity page */}
             <button
               onClick={() =>
-                router.push(
-                  `/project/${projectId}/entity/${entity.id}`
-                )
+                router.push(`/project/${projectId}/entity/${entity.id}`)
               }
               className="p-1 text-stone-300 hover:text-stone-500 transition-colors shrink-0 mt-0.5"
               title="Open entity page"

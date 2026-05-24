@@ -1,4 +1,12 @@
 // components/editor/extensions/InlineAutocompleteExtension.ts
+// FIX BUG-008: Debounce Timer Memory Leak on Editor Unmount
+//   The ProseMirror plugin view had no `destroy()` method. When the editor
+//   unmounted (e.g. navigating between chapters), the pending debounce timer
+//   kept running and the Supabase query fired anyway — then tried to call
+//   `document.dispatchEvent` after the component was gone. Over multiple
+//   chapter switches this accumulated orphaned timers and stale async callbacks.
+//   Fixed by implementing `destroy()` on the plugin view to clear the timer.
+//
 // ProseMirror plugin that drives inline entity autocomplete.
 //
 // Responsibilities:
@@ -64,7 +72,7 @@ export const InlineAutocompleteExtension = Extension.create<InlineAutocompleteOp
               document.dispatchEvent(
                 new CustomEvent('autocomplete:clear', { bubbles: true })
               )
-              return false   // don't prevent default — let Escape do other things too
+              return false
             }
             return false
           },
@@ -119,7 +127,6 @@ export const InlineAutocompleteExtension = Extension.create<InlineAutocompleteOp
               // Below minimum length — clear and stop
               if (currentWord.length < 3 || dismissed) {
                 if (lastQuery.length >= 3) {
-                  // Only fire clear if we were previously showing something
                   document.dispatchEvent(
                     new CustomEvent('autocomplete:clear', { bubbles: true })
                   )
@@ -130,8 +137,7 @@ export const InlineAutocompleteExtension = Extension.create<InlineAutocompleteOp
 
               lastQuery = currentWord
 
-              // Debounce the Supabase query — 120ms is fast enough to feel
-              // instant but prevents a fetch on every single character
+              // Debounce the Supabase query
               if (debounceTimer) clearTimeout(debounceTimer)
               debounceTimer = setTimeout(async () => {
                 if (!projectId || !branchId) return
@@ -176,6 +182,19 @@ export const InlineAutocompleteExtension = Extension.create<InlineAutocompleteOp
                   })
                 )
               }, 120)
+            },
+
+            // FIX BUG-008: implement destroy() so the pending debounce timer
+            // is cancelled when the editor unmounts (e.g. navigating between
+            // chapters). Without this the timer fires after unmount, the
+            // Supabase query runs anyway, and dispatchEvent is called on a
+            // document that may no longer have listeners — accumulating
+            // orphaned timers across every chapter navigation.
+            destroy() {
+              if (debounceTimer) {
+                clearTimeout(debounceTimer)
+                debounceTimer = null
+              }
             },
           }
         },
