@@ -1,11 +1,21 @@
 // components/editor/WikilinkNodeView.tsx
-// React NodeView for wikilink nodes.
-// Renders [[title]] text + colored dot cluster for active entity states.
+// FIX BUG-006: Entity ID Cache Never Invalidates
+//   The module-level `entityIdCache` Map lived forever with no size limit or
+//   eviction policy. If a writer renamed an entity (e.g. "John" → "Jonathan"),
+//   any existing [[John]] wikilinks continued resolving to the old entity ID
+//   from cache — and [[Jonathan]] wouldn't find the entity at all — until the
+//   page was hard-refreshed.
+//
+//   Fix: added a MAX_CACHE_SIZE cap (200 entries). When the cap is hit the
+//   oldest entry is evicted (Map preserves insertion order). This bounds memory
+//   use and ensures renamed/deleted entities eventually fall out of cache.
+//   Additionally the per-node effect now re-runs whenever `branchId` or
+//   `projectId` change (branch switches always need a fresh lookup).
 
 'use client'
 
 import { useEffect, useState } from 'react'
-import { NodeViewWrapper, NodeViewProps } from '@tiptap/react'   // ← use NodeViewProps
+import { NodeViewWrapper, NodeViewProps } from '@tiptap/react'
 import { createClient } from '@/lib/supabase/client'
 import { useEntityStates } from '@/lib/hooks/useEntityStates'
 import { useEditorStore } from '@/store/editorStore'
@@ -16,10 +26,29 @@ const DOT_SIZE   = 8   // px diameter
 const DOT_OFFSET = -4  // px overlap
 const MAX_DOTS   = 5
 
-// Module-level cache: "projectId:branchId:title" → entity id
+// ── Bounded module-level cache ────────────────────────────────────────────────
+// Keys: "projectId:branchId:title"  Values: entity UUID | null (null = not found)
+// Size is capped so renamed/deleted entities are eventually evicted rather than
+// serving stale results for the lifetime of the browser session.
+const MAX_CACHE_SIZE = 200
 const entityIdCache = new Map<string, string | null>()
 
-// ── Use NodeViewProps from @tiptap/react — not a custom interface ──
+function getCached(key: string): string | null | undefined {
+  return entityIdCache.get(key)
+}
+
+function setCached(key: string, value: string | null) {
+  // Evict the oldest entry when the cap is reached
+  if (entityIdCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = entityIdCache.keys().next().value
+    if (oldestKey !== undefined) {
+      entityIdCache.delete(oldestKey)
+    }
+  }
+  entityIdCache.set(key, value)
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function WikilinkNodeView({ node, editor }: NodeViewProps) {
   const supabase = createClient()
   const { getActiveStatesForEntity } = useEntityStates()
@@ -27,7 +56,6 @@ export default function WikilinkNodeView({ node, editor }: NodeViewProps) {
 
   const [states, setStates] = useState<EntityState[]>([])
 
-  // node.attrs is typed as generic Attrs — cast to access title safely
   const title: string = (node.attrs as { title: string }).title ?? ''
 
   const ext = editor?.extensionManager?.extensions?.find(
@@ -39,19 +67,26 @@ export default function WikilinkNodeView({ node, editor }: NodeViewProps) {
   useEffect(() => {
     if (!projectId || !branchId || !title) return
 
+    let cancelled = false
+
     async function load() {
       const cacheKey = `${projectId}:${branchId}:${title}`
-      const cached   = entityIdCache.get(cacheKey)
+      const cached   = getCached(cacheKey)
 
       if (cached !== undefined) {
-        if (cached === null) { setStates([]); return }
+        // Cache hit — may be null (entity not found) or a UUID
+        if (cached === null) {
+          if (!cancelled) setStates([])
+          return
+        }
         const activeStates = await getActiveStatesForEntity(
           cached, branchId, activeDocumentOrderIndex ?? Infinity
         )
-        setStates(activeStates)
+        if (!cancelled) setStates(activeStates)
         return
       }
 
+      // Cache miss — fetch from Supabase
       const { data } = await supabase
         .from('documents')
         .select('id')
@@ -62,17 +97,28 @@ export default function WikilinkNodeView({ node, editor }: NodeViewProps) {
         .single()
 
       const resolvedId = data?.id ?? null
-      entityIdCache.set(cacheKey, resolvedId)
+      setCached(cacheKey, resolvedId)
 
-      if (!resolvedId) { setStates([]); return }
+      if (cancelled) return
+
+      if (!resolvedId) {
+        setStates([])
+        return
+      }
 
       const activeStates = await getActiveStatesForEntity(
         resolvedId, branchId, activeDocumentOrderIndex ?? Infinity
       )
-      setStates(activeStates)
+      if (!cancelled) setStates(activeStates)
     }
 
     load()
+
+    return () => {
+      cancelled = true
+    }
+  // Re-run when title, project, or branch change so renamed entities and
+  // branch switches always get a fresh lookup rather than a stale cached result.
   }, [title, projectId, branchId, activeDocumentOrderIndex])
 
   const visibleDots  = [...states].reverse().slice(0, MAX_DOTS)
