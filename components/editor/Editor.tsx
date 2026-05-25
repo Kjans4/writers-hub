@@ -1,6 +1,7 @@
 // components/editor/Editor.tsx
-// Main editor component, mounted at /project/[projectId]/edit.
-// Contains the TipTap editor instance and orchestrates all editing features.
+// Updated: passes `editor` instance to EditorHeader so WordCount can derive
+// live stats directly from the ProseMirror document without any extra state.
+
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -19,7 +20,6 @@ import { useSnapshots } from '@/lib/hooks/useSnapshots'
 import { WikilinkExtension } from './extensions/WikilinkExtension'
 import { HoverCardExtension } from './extensions/HoverCardExtension'
 import { ParagraphKeyExtension } from './extensions/ParagraphKeyExtension'
-// ── ADDED IMPORT ──────────────────────────────────────────
 import { InlineAutocompleteExtension } from './extensions/InlineAutocompleteExtension'
 import InlineAutocomplete from './InlineAutocomplete'
 
@@ -52,25 +52,25 @@ export default function Editor({
   onSaveContent,
   onSaveTitle,
 }: EditorProps) {
-  const [content, setContent] = useState(initialContent)
+  const [content, setContent]   = useState(initialContent)
   const [focusMode, setFocusMode] = useState(false)
 
   // ── Paragraph versioning state ────────────────────────────
-  const [showRewrite, setShowRewrite] = useState(false)
-  const [showCompare, setShowCompare] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [showRewrite, setShowRewrite]               = useState(false)
+  const [showCompare, setShowCompare]               = useState(false)
+  const [showHistory, setShowHistory]               = useState(false)
   const [activeParagraphKey, setActiveParagraphKey] = useState<string | null>(null)
   const [activeParagraphContent, setActiveParagraphContent] = useState('')
-  const [compareVersions, setCompareVersions] = useState<{ a: string; b: string } | null>(null)
-  const [versionsExist, setVersionsExist] = useState<Set<string>>(new Set())
+  const [compareVersions, setCompareVersions]       = useState<{ a: string; b: string } | null>(null)
+  const [versionsExist, setVersionsExist]           = useState<Set<string>>(new Set())
 
   // ── Checkpoint state ──────────────────────────────────────
   const [showCheckpointModal, setShowCheckpointModal] = useState(false)
-  const [showTimeline, setShowTimeline] = useState(false)
+  const [showTimeline, setShowTimeline]               = useState(false)
 
-  const { syncLinks } = useLinks()
+  const { syncLinks }                                        = useLinks()
   const { syncParagraphs, getVersionsForParagraph, saveVersion } = useParagraphVersions()
-  const { createSnapshot } = useSnapshots()
+  const { createSnapshot }                                   = useSnapshots()
 
   // ── Extract paragraphs ────────────────────────────────────
   function extractParagraphs(editor: ReturnType<typeof useEditor>): ParagraphData[] {
@@ -79,7 +79,7 @@ export default function Editor({
     editor.state.doc.descendants((node) => {
       if (node.type.name === 'paragraph' && node.attrs.paragraph_key) {
         paragraphs.push({
-          key: node.attrs.paragraph_key,
+          key:     node.attrs.paragraph_key,
           content: node.textContent,
         })
       }
@@ -98,7 +98,7 @@ export default function Editor({
     editor.state.doc.nodesBetween(from, from, (node) => {
       if (node.type.name === 'paragraph') {
         result = {
-          key: node.attrs.paragraph_key ?? null,
+          key:     node.attrs.paragraph_key ?? null,
           content: node.textContent,
         }
       }
@@ -120,17 +120,10 @@ export default function Editor({
           class: 'text-amber-600 underline underline-offset-2 cursor-pointer',
         },
       }),
-      WikilinkExtension.configure({
-        projectId,
-        branchId,
-      }),
+      WikilinkExtension.configure({ projectId, branchId }),
       HoverCardExtension,
       ParagraphKeyExtension,
-      // ── ADDED EXTENSION ───────────────────────────────────
-      InlineAutocompleteExtension.configure({
-        projectId,
-        branchId,
-      }),
+      InlineAutocompleteExtension.configure({ projectId, branchId }),
     ],
     content: initialContent || '',
     editorProps: {
@@ -147,20 +140,15 @@ export default function Editor({
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey
-
-      // ⌘⇧S — save checkpoint
       if (mod && e.shiftKey && e.key === 'S') {
         e.preventDefault()
         setShowCheckpointModal(true)
       }
-
-      // ⌘. — toggle focus mode
       if (mod && e.key === '.') {
         e.preventDefault()
         setFocusMode((f) => !f)
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
@@ -172,14 +160,12 @@ export default function Editor({
       const { key, content } = getActiveParagraph(editor)
       setActiveParagraphKey(key)
       setActiveParagraphContent(editor.getHTML())
-
       if (key && versionsExist.has(key)) {
         setShowHistory(true)
       } else {
         setShowRewrite(true)
       }
     }
-
     document.addEventListener('editor:rewrite', handleRewriteClick)
     return () => document.removeEventListener('editor:rewrite', handleRewriteClick)
   }, [editor, versionsExist])
@@ -188,12 +174,7 @@ export default function Editor({
   useEffect(() => {
     function handleWikilinkUpdate(e: Event) {
       const { titles } = (e as CustomEvent).detail as { titles: string[] }
-      syncLinks({
-        projectId,
-        branchId,
-        sourceDocId: documentId,
-        targetTitles: titles,
-      })
+      syncLinks({ projectId, branchId, sourceDocId: documentId, targetTitles: titles })
     }
     document.addEventListener('wikilink:update', handleWikilinkUpdate)
     return () => document.removeEventListener('wikilink:update', handleWikilinkUpdate)
@@ -226,12 +207,7 @@ export default function Editor({
     [editor, documentId, onSaveContent, syncParagraphs, getVersionsForParagraph]
   )
 
-  useAutosave({
-    content,
-    onSave: handleSave,
-    delay: 1500,
-    enabled: !!editor,
-  })
+  useAutosave({ content, onSave: handleSave, delay: 1500, enabled: !!editor })
 
   // ── Focus mode ────────────────────────────────────────────
   useEffect(() => {
@@ -265,12 +241,7 @@ export default function Editor({
   // ── Save checkpoint ───────────────────────────────────────
   async function handleSaveCheckpoint(message: string) {
     if (!editor) return
-    await createSnapshot({
-      documentId,
-      branchId,
-      content: editor.getHTML(),
-      message,
-    })
+    await createSnapshot({ documentId, branchId, content: editor.getHTML(), message })
   }
 
   // ── Restore from checkpoint ───────────────────────────────
@@ -284,19 +255,12 @@ export default function Editor({
   return (
     <div id="editor-wrapper" className="relative min-h-screen px-6 py-12">
 
-      {/* Floating toolbar */}
       <EditorToolbar editor={editor} />
-
-      {/* Wikilink dropdown */}
       <WikilinkDropdown editor={editor} projectId={projectId} branchId={branchId} />
-
-      {/* Hover card */}
       <HoverCard projectId={projectId} branchId={branchId} />
-
-      {/* ── ADDED COMPONENT ─────────────────────────────────── */}
       <InlineAutocomplete editor={editor} />
 
-      {/* Chapter title + timeline toggle + checkpoint button */}
+      {/* Pass editor to EditorHeader so WordCount can read it directly */}
       <EditorHeader
         title={initialTitle}
         onTitleChange={onSaveTitle}
@@ -305,9 +269,9 @@ export default function Editor({
         onOpenCheckpoint={() => setShowCheckpointModal(true)}
         onToggleTimeline={() => setShowTimeline((t) => !t)}
         timelineOpen={showTimeline}
+        editor={editor}
       />
 
-      {/* Timeline strip — shown below title when toggled */}
       {showTimeline && (
         <TimelineStrip
           documentId={documentId}
@@ -318,12 +282,10 @@ export default function Editor({
         />
       )}
 
-      {/* Editor content */}
       <EditorContent editor={editor} />
 
       {/* ── Modals ─────────────────────────────────────────── */}
 
-      {/* Checkpoint modal */}
       {showCheckpointModal && (
         <CheckpointModal
           onSave={handleSaveCheckpoint}
@@ -331,7 +293,6 @@ export default function Editor({
         />
       )}
 
-      {/* Rewrite surface */}
       {showRewrite && editor && (
         <RewriteSurface
           editor={editor}
@@ -348,7 +309,6 @@ export default function Editor({
         />
       )}
 
-      {/* Compare view */}
       {showCompare && compareVersions && (
         <CompareView
           versionA={compareVersions.a}
@@ -363,14 +323,11 @@ export default function Editor({
         />
       )}
 
-      {/* History drawer */}
       {showHistory && activeParagraphKey && (
         <HistoryDrawer
           documentId={documentId}
           paragraphKey={activeParagraphKey}
-          onRestore={(content) => {
-            handleUseVersion(content)
-          }}
+          onRestore={(content) => { handleUseVersion(content) }}
           onClose={() => setShowHistory(false)}
         />
       )}

@@ -1,19 +1,16 @@
 // components/editor/EditorHeader.tsx
-// FIX BUG-005: Illegal setState During Render
-//   The previous code called `setLocalTitle(title)` directly in the component
-//   body (render phase) to sync the input when the parent title prop changed.
-//   This violates React's rules — setState during render causes a warning and
-//   can trigger infinite render loops on chapter switches. It also read
-//   `document.activeElement` during render which throws on the server (SSR).
-//   Fixed by moving the sync into a `useEffect` that depends on `title`.
+// Updated to show live word count + reading time next to the action buttons.
+// WordCount sits between the title input and the icon buttons — unobtrusive
+// at idle (stone-300), readable on hover.
 //
-// Updated for Phase 6: adds checkpoint button (Flag icon) and
-// timeline toggle button (Clock icon) to the header row.
+// Also carries forward FIX BUG-005: sync title via useEffect not render body.
 
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
 import { Focus, Minimize2, Flag, Clock } from 'lucide-react'
+import WordCount from './WordCount'
+import { Editor } from '@tiptap/react'
 
 interface EditorHeaderProps {
   title: string
@@ -23,6 +20,8 @@ interface EditorHeaderProps {
   onOpenCheckpoint: () => void
   onToggleTimeline: () => void
   timelineOpen: boolean
+  // Wire the TipTap editor instance in so WordCount can derive its stats
+  editor: Editor | null
 }
 
 export default function EditorHeader({
@@ -33,14 +32,12 @@ export default function EditorHeader({
   onOpenCheckpoint,
   onToggleTimeline,
   timelineOpen,
+  editor,
 }: EditorHeaderProps) {
   const [localTitle, setLocalTitle] = useState(title)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // FIX BUG-005: was called directly in the render body —
-  //   `if (localTitle !== title && document.activeElement !== inputRef.current) { setLocalTitle(title) }`
-  // Moved into a useEffect so it only runs after render, avoiding the
-  // illegal-setState-during-render violation and the SSR document access.
+  // BUG-005 fix: sync via useEffect, never in the render body
   useEffect(() => {
     if (document.activeElement !== inputRef.current) {
       setLocalTitle(title)
@@ -82,8 +79,15 @@ export default function EditorHeader({
           spellCheck={false}
         />
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-0.5 mt-1.5 flex-shrink-0">
+        {/* Right-side controls */}
+        <div className="flex items-center gap-2 mt-2 flex-shrink-0">
+
+          {/* Live word count — fades at idle, readable on hover */}
+          <WordCount editor={editor} />
+
+          {/* Divider — only shown when there are words */}
+          {editor && <div className="w-px h-3.5 bg-stone-200" />}
+
           {/* Timeline toggle */}
           <button
             onClick={onToggleTimeline}
