@@ -1,4 +1,11 @@
 // components/timeline/TimelineStrip.tsx
+// FIX BUG-020: Timeline Doesn't Refresh After Restore Creates a New Checkpoint
+//   After calling `restoreSnapshot`, the hook auto-creates a new "restore point"
+//   snapshot in Supabase. But the timeline strip never re-fetched — the new
+//   checkpoint didn't appear until the user closed and reopened the timeline.
+//   Fixed by re-fetching snapshots after a successful restore so the new
+//   auto-created checkpoint dot appears immediately.
+//
 // Horizontal timeline strip showing all checkpoints for the current chapter.
 // Rendered below the chapter title when the timeline is toggled open.
 // Each checkpoint is a dot on the line — clicking it opens CheckpointPreview.
@@ -13,17 +20,17 @@ import CheckpointPreview from './CheckpointPreview'
 import { Loader2, Flag } from 'lucide-react'
 
 interface TimelineStripProps {
-  documentId: string
-  branchId: string
+  documentId:    string
+  branchId:      string
   currentContent: string
-  onRestore: (content: string) => void
-  onClose: () => void
+  onRestore:     (content: string) => void
+  onClose:       () => void
 }
 
 function formatShortDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric',
+    day:   'numeric',
   })
 }
 
@@ -35,22 +42,25 @@ export default function TimelineStrip({
   onClose,
 }: TimelineStripProps) {
   const { getSnapshots, restoreSnapshot } = useSnapshots()
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
-  const [loading, setLoading] = useState(true)
-  const [previewing, setPreviewing] = useState<Snapshot | null>(null)
-  const [restoring, setRestoring] = useState(false)
+  const [snapshots, setSnapshots]         = useState<Snapshot[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [previewing, setPreviewing]       = useState<Snapshot | null>(null)
+  const [restoring, setRestoring]         = useState(false)
+
+  // ── Load snapshots ────────────────────────────────────────
+  async function loadSnapshots() {
+    setLoading(true)
+    const data = await getSnapshots(documentId)
+    // Reverse so oldest is on the left
+    setSnapshots([...data].reverse())
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      const data = await getSnapshots(documentId)
-      // Reverse so oldest is on the left
-      setSnapshots([...data].reverse())
-      setLoading(false)
-    }
-    load()
+    loadSnapshots()
   }, [documentId])
 
+  // ── Restore a snapshot ────────────────────────────────────
   async function handleRestore(snapshot: Snapshot) {
     setRestoring(true)
     const success = await restoreSnapshot({
@@ -58,10 +68,18 @@ export default function TimelineStrip({
       branchId,
       snapshot,
     })
+
     if (success) {
       onRestore(snapshot.content)
       setPreviewing(null)
+
+      // FIX BUG-020: restoreSnapshot auto-creates a new "restore point"
+      // snapshot in Supabase. Re-fetch so that new checkpoint dot appears
+      // in the timeline immediately instead of only after the user closes
+      // and reopens the strip.
+      await loadSnapshots()
     }
+
     setRestoring(false)
   }
 

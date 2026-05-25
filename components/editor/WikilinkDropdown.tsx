@@ -1,4 +1,11 @@
 // components/editor/WikilinkDropdown.tsx
+// FIX BUG-017: Unconditional Space Inserted After Wikilink
+//   `insertWikilink` always appended a space after the wikilink node via
+//   `editor.chain().insertContent(' ').run()`. If the cursor was followed by
+//   punctuation or an existing space, this produced a double-space or a space
+//   before a comma/period. Fixed by checking the character immediately after
+//   the cursor before deciding whether to insert a space.
+//
 // Search dropdown shown when the user types [[.
 // Searches existing entities by title (all types).
 // Selecting an item inserts a wikilink node into the editor.
@@ -35,6 +42,9 @@ const TYPE_COLORS: Record<DocumentType, string> = {
   object:    'text-sky-400',
 }
 
+// FIX BUG-017: characters that should NOT be preceded by a space
+const NO_SPACE_BEFORE = new Set([' ', '.', ',', '!', '?', ':', ';', ')', ']', '"', "'"])
+
 export default function WikilinkDropdown({
   editor,
   projectId,
@@ -42,25 +52,24 @@ export default function WikilinkDropdown({
 }: WikilinkDropdownProps) {
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Document[]>([])
+  const [open, setOpen]                   = useState(false)
+  const [query, setQuery]                 = useState('')
+  const [results, setResults]             = useState<Document[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const [position, setPosition]           = useState({ top: 0, left: 0 })
 
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef    = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // ── Listen for wikilink:search event ─────────────────────
   useEffect(() => {
     function handleOpen() {
-      // Get cursor position for dropdown placement
       const selection = window.getSelection()
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)
-        const rect = range.getBoundingClientRect()
+        const rect  = range.getBoundingClientRect()
         setPosition({
-          top: rect.bottom + window.scrollY + 4,
+          top:  rect.bottom + window.scrollY + 4,
           left: rect.left + window.scrollX,
         })
       }
@@ -79,7 +88,6 @@ export default function WikilinkDropdown({
 
     async function search() {
       if (!query.trim()) {
-        // Show all non-chapter entities
         const { data } = await supabase
           .from('documents')
           .select('*')
@@ -114,9 +122,23 @@ export default function WikilinkDropdown({
   // ── Insert wikilink and close ─────────────────────────────
   function insertWikilink(title: string) {
     if (!editor) return
+
     editor.chain().focus().insertWikilink(title).run()
-    // Insert a space after the wikilink so typing continues naturally
-    editor.chain().insertContent(' ').run()
+
+    // FIX BUG-017: only insert a trailing space when the character immediately
+    // after the cursor is not already a space or punctuation. This prevents
+    // double-spaces and spaces appearing before commas/periods.
+    const { from } = editor.state.selection
+    const docSize  = editor.state.doc.content.size
+    const charAfter =
+      from < docSize
+        ? editor.state.doc.textBetween(from, from + 1)
+        : ''
+
+    if (!NO_SPACE_BEFORE.has(charAfter)) {
+      editor.chain().insertContent(' ').run()
+    }
+
     setOpen(false)
     setQuery('')
   }
@@ -125,17 +147,15 @@ export default function WikilinkDropdown({
   async function createAndInsert(title: string, type: DocumentType = 'character') {
     if (!title.trim()) return
 
-    const nextOrder = 0 // will be at top of its section
-
     const { data: doc } = await supabase
       .from('documents')
       .insert({
-        project_id: projectId,
-        branch_id: branchId,
+        project_id:  projectId,
+        branch_id:   branchId,
         type,
-        title: title.trim(),
-        content: '',
-        order_index: nextOrder,
+        title:       title.trim(),
+        content:     '',
+        order_index: 0,
       })
       .select()
       .single()
@@ -160,7 +180,6 @@ export default function WikilinkDropdown({
       if (selectedIndex < results.length && results[selectedIndex]) {
         insertWikilink(results[selectedIndex].title)
       } else {
-        // "Create new" row is selected
         createAndInsert(query)
       }
     }

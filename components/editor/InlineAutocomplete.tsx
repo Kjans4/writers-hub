@@ -1,17 +1,19 @@
 // components/editor/InlineAutocomplete.tsx
+// FIX BUG-018: Ghost Text Position Ignores Horizontal Scroll
+//   The ghost text span used `suggestion.cursorRect.right` directly as the
+//   CSS `left` value for `position: fixed`. getBoundingClientRect() returns
+//   viewport-relative coordinates which is correct for fixed positioning in
+//   most cases, but if the editor container has horizontal overflow and is
+//   scrolled, the cursor rect no longer aligns with the visual cursor.
+//   Fixed by also accounting for `window.scrollX` when computing the left
+//   offset, consistent with how other overlay components in the codebase
+//   (HoverCard, EditorToolbar) handle positioning.
+//
 // Renders the inline autocomplete UI.
-//
-// Single match  → ghost text: a muted span positioned at the cursor
-//                showing the suffix of the matched entity name
-//
-// Multiple matches → small floating dropdown positioned below the cursor,
-//                    styled to match WikilinkDropdown but distinct component
-//
-// Tab (or Enter in dropdown) → deletes the partial word, inserts wikilink node
-// Escape → clears state (dismiss once behavior — handled in extension too)
-// Arrow keys → navigate dropdown items
-//
-// Mounted inside Editor.tsx alongside other overlay components.
+// Single match  → ghost text at cursor showing the suffix of the matched name
+// Multiple matches → small floating dropdown below the cursor
+// Tab / Enter → inserts wikilink node replacing the partial word
+// Escape → clears state
 
 'use client'
 
@@ -25,7 +27,6 @@ interface InlineAutocompleteProps {
   editor: Editor | null
 }
 
-// Maps entity type → icon (same palette as WikilinkDropdown)
 const TYPE_ICONS: Record<DocumentType, React.ReactNode> = {
   chapter:   <Scroll size={11} />,
   character: <User size={11} />,
@@ -50,7 +51,7 @@ interface SuggestionState {
 }
 
 export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) {
-  const [suggestion, setSuggestion] = useState<SuggestionState | null>(null)
+  const [suggestion, setSuggestion]       = useState<SuggestionState | null>(null)
   const [dropdownIndex, setDropdownIndex] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -59,10 +60,10 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
     function handleSuggest(e: Event) {
       const detail = (e as CustomEvent<AutocompleteSuggestDetail>).detail
       setSuggestion({
-        query: detail.query,
-        matches: detail.matches,
+        query:      detail.query,
+        matches:    detail.matches,
         cursorRect: detail.cursorRect,
-        wordStart: detail.wordStart,
+        wordStart:  detail.wordStart,
       })
       setDropdownIndex(0)
     }
@@ -79,21 +80,18 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
     }
   }, [])
 
-  // ── Accept a suggestion: delete partial word, insert wikilink ──
+  // ── Accept a suggestion ───────────────────────────────────
   const acceptSuggestion = useCallback(
     (title: string, wordStart: number) => {
       if (!editor) return
 
       const { from } = editor.state.selection
 
-      // 1. Delete the partial word the writer typed
       editor
         .chain()
         .focus()
         .deleteRange({ from: wordStart, to: from })
-        // 2. Insert the wikilink node (uses existing WikilinkExtension command)
         .insertWikilink(title)
-        // 3. Add a trailing space so writing continues naturally
         .insertContent(' ')
         .run()
 
@@ -112,8 +110,6 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
 
       if (e.key === 'Tab') {
         e.preventDefault()
-        // Single match → accept it directly
-        // Multiple matches → accept the highlighted dropdown item
         const target = isSingleMatch
           ? suggestion.matches[0]
           : suggestion.matches[dropdownIndex]
@@ -142,58 +138,58 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
 
       if (e.key === 'Escape') {
         setSuggestion(null)
-        // Note: the extension also sets dismissed=true on Escape,
-        // so the same word won't re-trigger until the writer types
-        // a different word.
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown, true) // capture phase
+    window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [suggestion, dropdownIndex, acceptSuggestion])
 
   if (!suggestion) return null
 
   const isSingleMatch = suggestion.matches.length === 1
-  const singleMatch = suggestion.matches[0]
+  const singleMatch   = suggestion.matches[0]
 
-  // Position: use the cursor's bounding rect + scrollY offset
-  const scrollY = window.scrollY
+  // FIX BUG-018: include window.scrollX when computing horizontal position for
+  // the ghost text span. getBoundingClientRect() is viewport-relative which is
+  // correct for `position: fixed`, but if the page or editor container has
+  // been horizontally scrolled the visual cursor drifts from the rect value.
+  // Adding scrollX keeps the ghost text aligned with the actual cursor glyph.
+  const scrollX = window.scrollX
 
   // ── Ghost text (single match) ─────────────────────────────
   if (isSingleMatch && singleMatch) {
     const suffix = singleMatch.title.slice(suggestion.query.length)
-    if (!suffix) return null   // exact match already — nothing to ghost
+    if (!suffix) return null
 
     return (
       <span
         style={{
-          position: 'fixed',
-          top: suggestion.cursorRect.top,
-          left: suggestion.cursorRect.right,
-          // Match the editor's font exactly so ghost text aligns with cursor
+          position:   'fixed',
+          top:        suggestion.cursorRect.top,
+          // FIX BUG-018: was `suggestion.cursorRect.right` — now adds scrollX
+          left:       suggestion.cursorRect.right + scrollX,
           fontFamily: 'var(--font-lora), Georgia, serif',
-          fontSize: '18px',
+          fontSize:   '18px',
           lineHeight: '1.8',
-          color: '#a8a29e',   // stone-400 — muted but visible
+          color:      '#a8a29e',
           pointerEvents: 'none',
           userSelect: 'none',
-          zIndex: 40,
-          // Small hint label so the writer knows what Tab does
+          zIndex:     40,
         }}
         aria-hidden="true"
       >
         {suffix}
         <span
           style={{
-            marginLeft: '8px',
-            fontFamily: 'var(--font-inter), sans-serif',
-            fontSize: '11px',
-            color: '#d6d3d1',   // stone-300
-            background: '#f5f5f4',
-            border: '1px solid #e7e5e4',
-            borderRadius: '4px',
-            padding: '1px 5px',
+            marginLeft:  '8px',
+            fontFamily:  'var(--font-inter), sans-serif',
+            fontSize:    '11px',
+            color:       '#d6d3d1',
+            background:  '#f5f5f4',
+            border:      '1px solid #e7e5e4',
+            borderRadius:'4px',
+            padding:     '1px 5px',
             verticalAlign: 'middle',
           }}
         >
@@ -204,11 +200,13 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
   }
 
   // ── Dropdown (multiple matches) ───────────────────────────
-  // Positioned below the cursor, left-aligned to it
   const dropdownTop  = suggestion.cursorRect.bottom + 4
   const dropdownLeft = Math.max(
     8,
-    Math.min(suggestion.cursorRect.left, window.innerWidth - 260 - 8)
+    Math.min(
+      suggestion.cursorRect.left + scrollX,
+      window.innerWidth - 260 - 8
+    )
   )
 
   return (
@@ -233,7 +231,6 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
           <button
             key={doc.id}
             onMouseDown={(e) => {
-              // mousedown instead of click so it fires before editor blur
               e.preventDefault()
               acceptSuggestion(doc.title, suggestion.wordStart)
             }}
@@ -247,7 +244,6 @@ export default function InlineAutocomplete({ editor }: InlineAutocompleteProps) 
               {TYPE_ICONS[doc.type]}
             </span>
             <span className="text-sm font-['Inter'] text-stone-700 flex-1 truncate">
-              {/* Bold the matched prefix, normal weight for the suffix */}
               <span className="font-semibold">
                 {doc.title.slice(0, suggestion.query.length)}
               </span>

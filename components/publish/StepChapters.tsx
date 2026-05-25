@@ -1,4 +1,14 @@
 // components/publish/StepChapters.tsx
+// FIX BUG-019: Double Source of Truth for Selected Chapter IDs
+//   On initial render the component defaulted `localSelected` to already-published
+//   chapters, but never called `onChange` with that default — so the parent
+//   wizard's `chapter_ids` started empty while the component showed checkmarks.
+//   If the user clicked "Publish" without touching any checkbox, the parent
+//   would submit an empty array. Fixed by calling `onChange` once on mount
+//   (via useEffect) whenever the initial selection is derived from defaults
+//   rather than the passed `selectedIds` prop, so parent and child are always
+//   in sync from the first render.
+//
 // Step 3 of the publish wizard.
 // Writer selects which chapters to publish.
 // All Canon chapters are shown; already-published ones are pre-checked.
@@ -6,23 +16,23 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BookOpen, Loader2 } from 'lucide-react'
 
 interface Chapter {
-  id: string
-  title: string
-  order_index: number | null
+  id:           string
+  title:        string
+  order_index:  number | null
   is_published: boolean
 }
 
 interface StepChaptersProps {
-  chapters:   Chapter[]
+  chapters:    Chapter[]
   selectedIds: string[]
-  onChange:   (ids: string[]) => void
-  onPublish:  (ids: string[]) => Promise<void>
-  onBack:     () => void
-  loading:    boolean
+  onChange:    (ids: string[]) => void
+  onPublish:   (ids: string[]) => Promise<void>
+  onBack:      () => void
+  loading:     boolean
 }
 
 export default function StepChapters({
@@ -33,12 +43,30 @@ export default function StepChapters({
   onBack,
   loading,
 }: StepChaptersProps) {
-  // Initialize selection: pre-check already-published chapters on first render
   const [localSelected, setLocalSelected] = useState<Set<string>>(() => {
     if (selectedIds.length > 0) return new Set(selectedIds)
     // Default: pre-check chapters that are already published
     return new Set(chapters.filter((c) => c.is_published).map((c) => c.id))
   })
+
+  // FIX BUG-019: sync the parent wizard's state with the initial default
+  // selection. Previously `onChange` was never called on mount, so if the
+  // user hit "Publish" immediately without changing any checkbox, the parent
+  // would submit `chapter_ids: []` even though checkmarks were showing.
+  useEffect(() => {
+    // Only fire if the parent didn't provide an explicit selection — i.e. we
+    // derived the default from already-published chapters ourselves.
+    if (selectedIds.length === 0) {
+      const defaultIds = chapters
+        .filter((c) => c.is_published)
+        .map((c) => c.id)
+      if (defaultIds.length > 0) {
+        onChange(defaultIds)
+      }
+    }
+    // Intentionally only runs on mount — deps array is empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function toggle(id: string) {
     const next = new Set(localSelected)
@@ -63,8 +91,7 @@ export default function StepChapters({
   }
 
   async function handlePublish() {
-    const ids = Array.from(localSelected)
-    await onPublish(ids)
+    await onPublish(Array.from(localSelected))
   }
 
   const selectedCount = localSelected.size
