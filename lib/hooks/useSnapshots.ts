@@ -1,4 +1,8 @@
 // lib/hooks/useSnapshots.ts
+// FIX BUG-013: Supabase Client Recreated on Every Render
+//   Moved createClient() to module level so one client instance is shared
+//   for the lifetime of the page rather than a new one on every render.
+//
 // Manages the snapshots table for chapter checkpoints.
 //   - createSnapshot: saves current content + message as a named snapshot
 //   - getSnapshots: fetches all snapshots for a document, newest first
@@ -10,9 +14,10 @@ import { useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Snapshot } from '@/lib/supabase/types'
 
-export function useSnapshots() {
-  const supabase = createClient()
+// FIX BUG-013: module-level singleton
+const supabase = createClient()
 
+export function useSnapshots() {
   // ── Create a named checkpoint ─────────────────────────────
   const createSnapshot = useCallback(
     async ({
@@ -30,9 +35,9 @@ export function useSnapshots() {
         .from('snapshots')
         .insert({
           document_id: documentId,
-          branch_id: branchId,
+          branch_id:   branchId,
           content,
-          message: message.trim() || null,
+          message:     message.trim() || null,
         })
         .select()
         .single()
@@ -59,8 +64,6 @@ export function useSnapshots() {
   )
 
   // ── Restore a snapshot ────────────────────────────────────
-  // 1. Updates documents.content to the snapshot content
-  // 2. Auto-creates a new snapshot marking the restore event
   const restoreSnapshot = useCallback(
     async ({
       documentId,
@@ -71,23 +74,21 @@ export function useSnapshots() {
       branchId: string
       snapshot: Snapshot
     }): Promise<boolean> => {
-      // 1. Update the document content
       const { error: updateError } = await supabase
         .from('documents')
         .update({
-          content: snapshot.content,
+          content:    snapshot.content,
           updated_at: new Date().toISOString(),
         })
         .eq('id', documentId)
 
       if (updateError) return false
 
-      // 2. Auto-create a restore-point snapshot
       await supabase.from('snapshots').insert({
         document_id: documentId,
-        branch_id: branchId,
-        content: snapshot.content,
-        message: `Restored from: "${snapshot.message ?? formatDate(snapshot.created_at)}"`,
+        branch_id:   branchId,
+        content:     snapshot.content,
+        message:     `Restored from: "${snapshot.message ?? formatDate(snapshot.created_at)}"`,
       })
 
       return true
@@ -101,7 +102,7 @@ export function useSnapshots() {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+    day:   'numeric',
+    year:  'numeric',
   })
 }

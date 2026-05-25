@@ -1,22 +1,19 @@
 // lib/hooks/useMarkLabels.ts
+// FIX BUG-013: Supabase Client Recreated on Every Render
+//   Moved createClient() to module level so one client instance is shared
+//   for the lifetime of the page rather than a new one on every render.
+//
 // CRUD for the mark_labels table.
 // Labels are project-scoped — shared across all branches.
-//
-// Exports:
-//   getLabels(projectId)         → MarkLabel[]
-//   createLabel(projectId, name, color) → MarkLabel | null
-//   updateLabel(id, fields)      → MarkLabel | null
-//   deleteLabel(id)              → boolean
-//
-// Called from ManageLabels.tsx and EntityStates.tsx (for the picker).
 
 import { useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MarkLabel } from '@/lib/supabase/types'
 
-export function useMarkLabels() {
-  const supabase = createClient()
+// FIX BUG-013: module-level singleton
+const supabase = createClient()
 
+export function useMarkLabels() {
   // ── Fetch all labels for a project ───────────────────────
   const getLabels = useCallback(
     async (projectId: string): Promise<MarkLabel[]> => {
@@ -43,7 +40,7 @@ export function useMarkLabels() {
         .from('mark_labels')
         .insert({
           project_id: projectId,
-          name: name.trim(),
+          name:       name.trim(),
           color,
         })
         .select()
@@ -77,7 +74,6 @@ export function useMarkLabels() {
   // ── Delete a label ────────────────────────────────────────
   // Note: deleting a label cascades to all entity_states that
   // reference it (on delete cascade in the migration).
-  // ManageLabels.tsx should warn the user about this.
   const deleteLabel = useCallback(
     async (id: string): Promise<boolean> => {
       const { error } = await supabase

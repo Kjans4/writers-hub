@@ -1,4 +1,12 @@
 // lib/hooks/useLinks.ts
+// FIX BUG-013: Supabase Client Recreated on Every Render
+//   `createClient()` was called inside the hook body, meaning a new Supabase
+//   browser client was instantiated on every component render. createBrowserClient
+//   from @supabase/ssr is designed to be called once and reused — repeated calls
+//   waste memory and can interfere with Supabase's internal session/cookie
+//   management. Fixed by moving the client to module level so it is created
+//   once and shared across all hook calls.
+//
 // Manages the links table — the single source of truth for
 // wikilink connections, hover card data, "Appears In", and the story map.
 // Exposes: syncLinks (diff + upsert), getLinksForDocument, getEntityMeta.
@@ -7,13 +15,11 @@ import { useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Link, Document } from '@/lib/supabase/types'
 
-export function useLinks() {
-  const supabase = createClient()
+// FIX BUG-013: module-level singleton — one client for the lifetime of the page
+const supabase = createClient()
 
+export function useLinks() {
   // ── Sync links from a parsed wikilink list ──────────────────────────
-  // Called by WikilinkExtension after every editor update.
-  // Diffs the current link set against what's in the DB and
-  // inserts new rows / deletes removed ones.
   const syncLinks = useCallback(
     async ({
       projectId,
@@ -28,9 +34,7 @@ export function useLinks() {
     }) => {
       if (!projectId || !branchId || !sourceDocId) return
 
-      // 1. Resolve titles → document IDs
       if (targetTitles.length === 0) {
-        // Remove all links from this source
         await supabase
           .from('links')
           .delete()
@@ -50,7 +54,6 @@ export function useLinks() {
 
       const targetIds = targets.map((t) => t.id)
 
-      // 2. Get existing links for this source
       const { data: existing } = await supabase
         .from('links')
         .select('id, target_doc_id')
@@ -58,22 +61,20 @@ export function useLinks() {
         .eq('branch_id', branchId)
 
       const existingTargetIds = new Set((existing ?? []).map((l) => l.target_doc_id))
-      const newTargetIds = new Set(targetIds)
+      const newTargetIds      = new Set(targetIds)
 
-      // 3. Insert links that don't exist yet
       const toInsert = targetIds.filter((id) => !existingTargetIds.has(id))
       if (toInsert.length > 0) {
         await supabase.from('links').insert(
           toInsert.map((targetId) => ({
-            project_id: projectId,
-            branch_id: branchId,
+            project_id:    projectId,
+            branch_id:     branchId,
             source_doc_id: sourceDocId,
             target_doc_id: targetId,
           }))
         )
       }
 
-      // 4. Delete links that were removed
       const toDelete = (existing ?? [])
         .filter((l) => !newTargetIds.has(l.target_doc_id))
         .map((l) => l.id)
