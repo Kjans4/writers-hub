@@ -1,7 +1,8 @@
 // app/(editor)/layout.tsx
 // Layout for the editor shell: project pages, chapter editor, entity pages.
-// Auth check only — the editor has its own full-screen chrome (top bar,
-// left panel, right panel). The global reader nav does NOT appear here.
+// Dashboard has moved to (reader) — this group now covers only /project/... routes.
+// Auth check: unauthenticated users are redirected to /login.
+// No ReaderNav here — the editor has its own full-screen chrome.
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
