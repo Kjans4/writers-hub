@@ -1,108 +1,120 @@
 // app/api/bookmarks/route.ts
-// GET — all bookmarks for the current user, with chapter_number computed
-// from the document's position in the published chapter ordering.
+// GET — all bookmarks for the current user, with resolved metadata.
+// Returns story cover, title, slug, chapter title, chapter position.
+// Chapter position is resolved server-side from order_index rank.
+//
+// Fix B: the join on published_stories may return null for bookmarks
+//        whose project has not yet been published. Those rows are
+//        filtered out of the response (no story metadata = can't render
+//        a useful BookmarkCard). The bookmark row is NOT deleted —
+//        if the story is published later the bookmark will surface.
+//
+// Response shape per item:
+//   {
+//     id:               string
+//     document_id:      string
+//     story_id:         string        ← added for CoverPlaceholder (fix D)
+//     chapter_number:   number        ← 1-based, from COUNT query
+//     chapter_title:    string
+//     story_slug:       string
+//     story_title:      string
+//     story_cover_url:  string | null
+//     created_at:       string
+//   }
 
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 
-export async function GET(_req: NextRequest) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+export async function GET() {
+  const supabase = await createClient()
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    // 1. Fetch bookmarks with document + story data
-    const { data, error } = await supabase
-      .from('bookmarks')
-      .select(`
-        id,
-        document_id,
-        created_at,
-        documents (
-          id,
-          title,
-          project_id
-        ),
-        published_stories (
-          id,
-          slug,
-          title,
-          cover_url,
-          project_id
-        )
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    // 2. Collect unique project_ids so we can fetch chapter orderings in bulk
-    const projectIds = [
-      ...new Set(
-        (data ?? [])
-          .map((row: any) => {
-            const story = row.published_stories
-            return Array.isArray(story) ? story[0]?.project_id : story?.project_id
-          })
-          .filter(Boolean)
+  // ── Fetch bookmarks with joins ────────────────────────────
+  // Join to documents (chapter title, order_index, project_id, branch_id)
+  // and to published_stories (id, slug, title, cover_url).
+  // published_stories join may return null — see Fix B above.
+  const { data: rows, error } = await supabase
+    .from('bookmarks')
+    .select(`
+      id,
+      document_id,
+      created_at,
+      documents (
+        title,
+        order_index,
+        project_id,
+        branch_id
       ),
-    ] as string[]
+      published_stories (
+        id,
+        slug,
+        title,
+        cover_url
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
 
-    // 3. For each project, fetch published chapters ordered by order_index
-    //    and build a document_id → 1-based position map
-    const positionMap = new Map<string, number>()
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
-    if (projectIds.length > 0) {
-      const { data: chapterRows } = await supabase
-        .from('documents')
-        .select('id, project_id, order_index')
-        .in('project_id', projectIds)
-        .eq('type', 'chapter')
-        .eq('is_published', true)
-        .order('order_index', { ascending: true })
+  if (!rows || rows.length === 0) {
+    return NextResponse.json({ bookmarks: [] })
+  }
 
-      // Group by project_id and assign positions
-      const byProject = new Map<string, string[]>()
-      for (const ch of chapterRows ?? []) {
-        const list = byProject.get(ch.project_id) ?? []
-        list.push(ch.id)
-        byProject.set(ch.project_id, list)
-      }
+  // ── Resolve chapter position for each bookmark ────────────
+  // Position = COUNT of published chapters with order_index <=
+  // this chapter's order_index within the same project + branch.
+  // The .lte filter includes the bookmarked chapter itself, so
+  // COUNT directly gives the correct 1-based position (no +1 needed).
+  // Rows where story or doc is null (unpublished project) are
+  // filtered out — they can't render a usable BookmarkCard.
+  const resolved = await Promise.all(
+    rows.map(async (row) => {
+      // Supabase returns joined single-row relations as objects (not arrays)
+      // when the FK is many-to-one, but may return arrays in some SDK versions.
+      // Normalise defensively.
+      const doc   = Array.isArray(row.documents)
+        ? row.documents[0]
+        : row.documents
+      const story = Array.isArray(row.published_stories)
+        ? row.published_stories[0]
+        : row.published_stories
 
-      for (const [, ids] of byProject) {
-        ids.forEach((id, idx) => positionMap.set(id, idx + 1))
-      }
-    }
-
-    // 4. Shape the response
-    const bookmarks = (data ?? []).map((row: any) => {
-      const doc   = Array.isArray(row.documents)        ? row.documents[0]        : row.documents
-      const story = Array.isArray(row.published_stories) ? row.published_stories[0] : row.published_stories
-
+      // Fix B: skip rows with no story (project not yet published)
       if (!doc || !story) return null
+
+      const { count } = await supabase
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', (doc as any).project_id)
+        .eq('branch_id',  (doc as any).branch_id)
+        .eq('type',       'chapter')
+        .eq('is_published', true)
+        .lte('order_index', (doc as any).order_index ?? 0)
 
       return {
         id:              row.id,
         document_id:     row.document_id,
-        story_id:        story.id,
-        chapter_number:  positionMap.get(row.document_id) ?? 1,
-        chapter_title:   doc.title ?? 'Untitled',
-        story_slug:      story.slug,
-        story_title:     story.title,
-        story_cover_url: story.cover_url ?? null,
+        // Fix D: pass story_id (not document_id) so BookmarkCard's
+        // CoverPlaceholder derives the same color as the home feed.
+        story_id:        (story as any).id,
+        chapter_number:  count ?? 1,
+        chapter_title:   (doc as any).title ?? 'Untitled',
+        story_slug:      (story as any).slug,
+        story_title:     (story as any).title,
+        story_cover_url: (story as any).cover_url ?? null,
         created_at:      row.created_at,
       }
-    }).filter(Boolean)
+    })
+  )
 
-    return NextResponse.json({ bookmarks }, { status: 200 })
-  } catch (error) {
-    console.error('[BOOKMARKS_GET_ALL_ERROR]:', error)
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500 }
-    )
-  }
+  const bookmarks = resolved.filter(Boolean)
+
+  return NextResponse.json({ bookmarks })
 }

@@ -1,80 +1,89 @@
-// app/api/story/[slug]/tags/route.ts
-// POST /api/story/[slug]/tags
-// Replaces all tags for a story. Auth required — must be story owner.
-// NOTE: despite the param name being "slug" (required to match the sibling
-// [slug]/route.ts at this path level), the client passes the story's UUID,
-// not its slug. We look it up by ID.
-// Body: { tags: string[] }  max 5
+// app/api/story/[slug]/route.ts
+// GET — public story metadata + published chapter list.
+// No auth required. Used by the story info page (/story/[slug]).
+//
+// Fix I: params is awaited (required in Next.js 14.2+ App Router).
 
-import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { normalizeTag } from '@/lib/utils/normalizeTag'
+import { createClient } from '@/lib/supabase/server'
 
-export async function POST(
-  req: NextRequest,
+export async function GET(
+  _request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // Fix I — await params
   const { slug } = await params
+
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // slug is actually the story UUID (the client sends the ID, not the slug)
-  const storyId = slug
-
-  // Verify ownership
+  // Fetch the published story
   const { data: story } = await supabase
     .from('published_stories')
-    .select('id, user_id')
-    .eq('id', storyId)
+    .select('*')
+    .eq('slug', slug)
+    .eq('is_published', true)
     .single()
 
-  if (!story || story.user_id !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!story) {
+    return NextResponse.json({ error: 'Story not found' }, { status: 404 })
   }
 
-  const body = await req.json()
-  const rawTags: string[] = (body.tags ?? []).slice(0, 5)
-  const normalized = [...new Set(rawTags.map(normalizeTag).filter(Boolean))]
+  // Fetch the Canon branch for this project
+  const { data: canonBranch } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('project_id', story.project_id)
+    .eq('is_canon', true)
+    .single()
 
-  // Delete all existing story_tags for this story
-  await supabase
-    .from('story_tags')
-    .delete()
-    .eq('published_story_id', story.id)
-
-  // Upsert each tag and link to story
-  for (const name of normalized) {
-    // Get existing tag
-    let { data: existingTag } = await supabase
-      .from('tags')
-      .select('id, use_count')
-      .eq('name', name)
-      .single()
-
-    if (!existingTag) {
-      // Insert new tag
-      const { data: newTag } = await supabase
-        .from('tags')
-        .insert({ name, use_count: 1 })
-        .select('id, use_count')
-        .single()
-      existingTag = newTag
-    } else {
-      // Increment use_count
-      await supabase
-        .from('tags')
-        .update({ use_count: existingTag.use_count + 1 })
-        .eq('id', existingTag.id)
-    }
-
-    if (existingTag) {
-      await supabase
-        .from('story_tags')
-        .insert({ published_story_id: story.id, tag_id: existingTag.id })
-    }
+  if (!canonBranch) {
+    return NextResponse.json({ error: 'Story has no canon branch' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true })
+  // Fetch ALL chapters (published + draft) so we can show draft count in the drawer
+  const { data: allChapters } = await supabase
+    .from('documents')
+    .select('id, title, order_index, is_published, published_at')
+    .eq('project_id', story.project_id)
+    .eq('branch_id', canonBranch.id)
+    .eq('type', 'chapter')
+    .order('order_index', { ascending: true })
+
+  const chapters = allChapters ?? []
+
+  // Separate published from draft
+  const publishedChapters = chapters.filter((c) => c.is_published)
+  const draftCount = chapters.length - publishedChapters.length
+
+  // Assign 1-based positions to published chapters
+  const publishedWithPositions = publishedChapters.map((ch, index) => ({
+    document_id:  ch.id,
+    position:     index + 1,
+    title:        ch.title,
+    published_at: ch.published_at,
+  }))
+
+  // Fetch author profile
+  const { data: author } = await supabase
+    .from('profiles')
+    .select('username, display_name, avatar_url, bio')
+    .eq('id', story.user_id)
+    .single()
+
+  return NextResponse.json({
+    story: {
+      id:             story.id,
+      slug:           story.slug,
+      title:          story.title,
+      hook:           story.hook,
+      description:    story.description,
+      cover_url:      story.cover_url,
+      content_rating: story.content_rating,
+      status:         story.status,
+      published_at:   story.published_at,
+    },
+    chapters:    publishedWithPositions,
+    draft_count: draftCount,
+    author:      author ?? null,
+  })
 }

@@ -2,29 +2,35 @@
 // GET  — is this chapter bookmarked by the current user?
 // POST — toggle: create if absent, delete if present.
 //
+// Fix B: published_story_id is stored as NULL when the chapter's project
+//        has no published_stories row yet. The column is NULLABLE in the
+//        corrected migration, so the insert no longer 500s.
+//
+// Fix I: params is awaited (required in Next.js 14.2+ App Router).
+//
 // GET response:
 //   { bookmarked: boolean, bookmark_id: string | null }
 //
 // POST response:
 //   { bookmarked: boolean, bookmark_id: string | null }
-//
-// POST creates with published_story_id resolved from the chapter's project.
-// If the story is not published, returns 422 — readers should not be able
-// to reach an unpublished chapter anyway (chapter page enforces is_published).
 
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+
+// ── GET /api/bookmarks/[documentId] ──────────────────────────
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ documentId: string }> }
 ) {
+  // Fix I — await params
   const { documentId } = await params
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    // Unauthenticated — not an error, icon just stays in default state
+    // Not logged in — not bookmarked, no error
     return NextResponse.json({ bookmarked: false, bookmark_id: null })
   }
 
@@ -41,11 +47,15 @@ export async function GET(
   })
 }
 
+// ── POST /api/bookmarks/[documentId] ─────────────────────────
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ documentId: string }> }
 ) {
+  // Fix I — await params
   const { documentId } = await params
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -76,7 +86,7 @@ export async function POST(
   }
 
   // ── Not bookmarked → create it ────────────────────────────
-  // Resolve the chapter's project so we can find its published story
+  // Resolve the chapter's project_id so we can look up published_stories.
   const { data: doc } = await supabase
     .from('documents')
     .select('project_id')
@@ -87,7 +97,10 @@ export async function POST(
     return NextResponse.json({ error: 'Chapter not found' }, { status: 404 })
   }
 
-  // Resolve published_story_id — required (NOT NULL in schema)
+  // Fix B: story lookup — NULL is a valid value here.
+  // The column is NULLABLE in the migration, so inserting null does not
+  // violate the FK constraint. This allows bookmarking chapters from
+  // projects that haven't been published yet (e.g. direct-link previews).
   const { data: story } = await supabase
     .from('published_stories')
     .select('id')
@@ -95,21 +108,12 @@ export async function POST(
     .eq('is_published', true)
     .maybeSingle()
 
-  if (!story) {
-    // Should not happen if the reader reached this chapter through normal navigation,
-    // but guard explicitly rather than inserting null and violating the constraint.
-    return NextResponse.json(
-      { error: 'Cannot bookmark a chapter from an unpublished story' },
-      { status: 422 }
-    )
-  }
-
   const { data: inserted, error: insertError } = await supabase
     .from('bookmarks')
     .insert({
       user_id:            user.id,
       document_id:        documentId,
-      published_story_id: story.id,
+      published_story_id: story?.id ?? null,  // NULL when not yet published
     })
     .select('id')
     .single()

@@ -1,6 +1,9 @@
 // app/(reading)/layout.tsx
-// Minimal layout wrapper for the reading route group.
-// Auth is handled at the page level — this layout has no chrome.
+// Minimal layout for the chapter reading experience.
+// Intentionally has NO ReaderNav — ReadingHeader replaces it for these routes.
+// This is a separate route group from (reader) so the global nav is suppressed.
+// Routes under this group:
+//   /story/[slug]/chapter/[number]  (moved from (reader))
 
 export default function ReadingLayout({
   children,
