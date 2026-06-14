@@ -1,6 +1,14 @@
 // app/(reading)/story/[slug]/chapter/[number]/page.tsx
-// Phase E update: mounts TipSection below chapter navigation.
-// Also fetches author display name for the tip section.
+// Chapter reading page — lives in the (reading) route group so that
+// ReaderNav is suppressed and ReadingHeader owns the top of the screen.
+//
+// Previously lived at app/(reader)/story/[slug]/chapter/[number]/page.tsx.
+// Move the file; delete the old location.
+//
+// Changes from the old version:
+//   1. Imports and renders ReadingHeader (sticky, replaces ReaderNav here)
+//   2. Imports and renders ChapterAnnotationShell (wraps chapter content)
+//   3. Resolves totalChapters so ReadingHeader can show "Ch N of M"
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
@@ -8,25 +16,24 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import ReadingHeader from '@/components/reader/ReadingHeader'
 import ChapterAnnotationShell from '@/components/reader/ChapterAnnotationShell'
-import RatingPrompt from '@/components/rating/RatingPrompt'
-import TipSection from '@/components/ink/TipSection'
 
 interface ChapterReadPageProps {
   params: Promise<{ slug: string; number: string }>
 }
 
 export default async function ChapterReadPage({ params }: ChapterReadPageProps) {
-  const supabase = await createClient()
+  // Fix I — await params (required in Next.js 14.2+ App Router)
+  const { slug, number } = await params
 
-  const resolvedParams = await params
-  const position = parseInt(resolvedParams.number, 10)
+  const supabase = await createClient()
+  const position = parseInt(number, 10)
   if (isNaN(position) || position < 1) notFound()
 
   // Fetch story
   const { data: story } = await supabase
     .from('published_stories')
     .select('id, title, slug, project_id, user_id')
-    .eq('slug', resolvedParams.slug)
+    .eq('slug', slug)
     .eq('is_published', true)
     .single()
 
@@ -59,27 +66,11 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
 
   const prevPosition = position > 1 ? position - 1 : null
   const nextPosition = position < allChapters.length ? position + 1 : null
+  const totalChapters = allChapters.length
 
-  // Fetch author display name for TipSection
-  const { data: authorProfile } = await supabase
-    .from('profiles')
-    .select('display_name, username')
-    .eq('id', story.user_id)
-    .single()
-
-  const authorName =
-    authorProfile?.display_name ??
-    authorProfile?.username ??
-    'the author'
-
-  // Auth + reading progress + ratings data
+  // Update reading progress if logged in
   const { data: { user } } = await supabase.auth.getUser()
-
-  let completedCount = 0
-  let existingRating = null
-
   if (user) {
-    // Upsert reading progress
     await supabase
       .from('reading_progress')
       .upsert(
@@ -91,63 +82,23 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
         },
         { onConflict: 'user_id,published_story_id' }
       )
-
-    // Mark chapter completed
-    await supabase
-      .from('completed_chapters')
-      .upsert(
-        { user_id: user.id, document_id: chapter.id },
-        { onConflict: 'user_id,document_id', ignoreDuplicates: true }
-      )
-
-    // Count completed chapters for this story
-    const publishedIds = allChapters.map((c) => c.id)
-    const { count } = await supabase
-      .from('completed_chapters')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .in('document_id', publishedIds)
-
-    completedCount = count ?? 0
-
-    // Fetch existing rating for RatingPrompt
-    if (completedCount >= 3) {
-      const { data: ratingRow } = await supabase
-        .from('ratings')
-        .select('prose, plot, characters, pacing, world, dismissed_count')
-        .eq('user_id', user.id)
-        .eq('published_story_id', story.id)
-        .maybeSingle()
-
-      existingRating = ratingRow ?? null
-    }
   }
 
   return (
-    <div className="min-h-screen bg-[#faf9f7] flex flex-col">
+    <>
+      {/* ReadingHeader — sticky top bar, replaces ReaderNav for this route */}
       <ReadingHeader
         storyTitle={story.title}
         storySlug={story.slug}
         chapterNumber={position}
-        totalChapters={allChapters.length}
+        totalChapters={totalChapters}
         documentId={chapter.id}
         isLoggedIn={!!user}
       />
 
-      <div className="flex-1 max-w-[680px] mx-auto px-6 pt-24 pb-12 w-full">
+      <div className="max-w-[680px] mx-auto px-6 py-12">
 
-        {/* Back to story */}
-        <div className="mb-8">
-          <Link
-            href={`/story/${story.slug}`}
-            className="flex items-center gap-1.5 text-stone-400 hover:text-stone-600 text-sm font-['Inter'] transition-colors"
-          >
-            <ArrowLeft size={14} />
-            {story.title}
-          </Link>
-        </div>
-
-        {/* Chapter title */}
+        {/* Chapter header */}
         <div className="mb-10">
           <p className="text-xs text-stone-400 font-['Inter'] uppercase tracking-wider mb-2">
             Chapter {position}
@@ -157,12 +108,18 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
           </h1>
         </div>
 
-        {/* Chapter prose + annotation layers */}
+        {/* Chapter content — wrapped in annotation shell */}
         <ChapterAnnotationShell
           documentId={chapter.id}
+          storySlug={story.slug}
+          chapterNumber={position}
           isLoggedIn={!!user}
-          chapterHtml={chapter.content ?? ''}
-        />
+        >
+          <div
+            className="editor-content"
+            dangerouslySetInnerHTML={{ __html: chapter.content ?? '' }}
+          />
+        </ChapterAnnotationShell>
 
         {/* Chapter navigation */}
         <div className="flex items-center justify-between mt-16 pt-8 border-t border-stone-200">
@@ -192,25 +149,7 @@ export default async function ChapterReadPage({ params }: ChapterReadPageProps) 
             </div>
           )}
         </div>
-
-        {/* Phase E — Tip section (below nav, above rating) */}
-        <TipSection
-          storyId={story.id}
-          documentId={chapter.id}
-          authorName={authorName}
-          isLoggedIn={!!user}
-        />
-
-        {/* Phase D — Rating prompt */}
-        {user && (
-          <RatingPrompt
-            storyId={story.id}
-            completedCount={completedCount}
-            existingRating={existingRating}
-          />
-        )}
-
       </div>
-    </div>
+    </>
   )
 }
