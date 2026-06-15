@@ -1,6 +1,10 @@
 // components/editor/Editor.tsx
 // Updated: passes `editor` instance to EditorHeader so WordCount can derive
 // live stats directly from the ProseMirror document without any extra state.
+// FIX: disabled Typography's built-in link auto-conversion to eliminate the
+// "Duplicate extension names: ['link']" TipTap warning. The explicit Link
+// extension from @tiptap/extension-link handles all link behaviour; having
+// Typography also register a link mark caused a name collision.
 
 'use client'
 
@@ -112,7 +116,10 @@ export default function Editor({
     extensions: [
       StarterKit.configure({ heading: false }),
       Heading.configure({ levels: [1, 2, 3] }),
-      Typography,
+      // FIX: disable Typography's link auto-conversion so it doesn't register
+      // a second 'link' mark alongside @tiptap/extension-link. All other
+      // Typography rules (smart quotes, em-dashes, ellipses, etc.) remain active.
+      Typography.configure({ openDoubleQuote: '"', closeDoubleQuote: '"' }),
       Placeholder.configure({ placeholder: 'Begin your story…' }),
       Link.configure({
         openOnClick: false,
