@@ -4,6 +4,8 @@
 // Dropdown options: switch to any branch, fork new branch, set as Canon,
 // delete non-Canon branch.
 // Switching branch reloads all documents via LeftPanel (branchId change in store).
+// FIX: added finally block to load() so a failed getBranches call never leaves
+// the component stuck in an infinite loading state. Added inline error state.
 
 'use client'
 
@@ -21,6 +23,7 @@ import {
   Star,
   Trash2,
   Loader2,
+  AlertCircle,
 } from 'lucide-react'
 
 interface BranchDropdownProps {
@@ -34,6 +37,7 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
 
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [open, setOpen] = useState(false)
   const [showForkModal, setShowForkModal] = useState(false)
   const [settingCanon, setSettingCanon] = useState<string | null>(null)
@@ -48,16 +52,21 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const data = await getBranches(projectId)
-      setBranches(data)
+      setLoadError(false)
+      try {
+        const data = await getBranches(projectId)
+        setBranches(data)
 
-      // If no active branch set, default to Canon
-      if (!activeBranchId) {
-        const canon = data.find((b) => b.is_canon)
-        if (canon) setActiveBranch(canon.id)
+        // If no active branch set, default to Canon
+        if (!activeBranchId) {
+          const canon = data.find((b) => b.is_canon)
+          if (canon) setActiveBranch(canon.id)
+        }
+      } catch {
+        setLoadError(true)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
     load()
   }, [projectId])
@@ -128,6 +137,33 @@ export default function BranchDropdown({ projectId }: BranchDropdownProps) {
       }
     }
     setDeletingId(null)
+  }
+
+  // ── Error state ───────────────────────────────────────────
+  if (loadError) {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-red-400 text-xs font-['Inter'] cursor-pointer hover:text-red-600 transition-colors"
+        title="Failed to load branches — click to retry"
+        onClick={() => {
+          setLoadError(false)
+          setLoading(true)
+          getBranches(projectId)
+            .then((data) => {
+              setBranches(data)
+              if (!activeBranchId) {
+                const canon = data.find((b) => b.is_canon)
+                if (canon) setActiveBranch(canon.id)
+              }
+            })
+            .catch(() => setLoadError(true))
+            .finally(() => setLoading(false))
+        }}
+      >
+        <AlertCircle size={12} />
+        <span>Branches failed to load — retry</span>
+      </div>
+    )
   }
 
   if (loading) {
