@@ -1,4 +1,13 @@
 // app/library/page.tsx
+// Library page — two tabs:
+//   Bookmarks     — saved chapter positions (Phase C)
+//   Reading Lists — custom curated lists (want-to-read, favourites, etc.)
+//
+// Fix E: tab labels now accurately describe their contents.
+// "Reading Lists" makes it clear that custom lists (want-to-read,
+// favourites, etc.) all live under one tab — users create and name
+// their own lists rather than having fixed system categories.
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -27,9 +36,11 @@ export default function LibraryPage() {
     <main className="max-w-4xl mx-auto px-6 py-10 font-['Inter']">
 
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Your Library</h1>
+        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+          Your Library
+        </h1>
         <p className="text-xs text-stone-400 mt-1">
-          Manage your saved bookmarks and custom reading lists.
+          Your saved bookmarks and reading lists.
         </p>
       </div>
 
@@ -44,7 +55,7 @@ export default function LibraryPage() {
           }`}
         >
           <Bookmark size={15} className={activeTab === 'bookmarks' ? 'fill-current' : ''} />
-          Saved Bookmarks
+          Bookmarks
         </button>
 
         <button
@@ -60,7 +71,7 @@ export default function LibraryPage() {
         </button>
       </div>
 
-      {/* Active tab */}
+      {/* Active tab content */}
       <div className="animate-in fade-in duration-200">
         {activeTab === 'bookmarks' ? (
           <BookmarksTabContent />

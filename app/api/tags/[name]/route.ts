@@ -1,20 +1,25 @@
 // app/api/tags/[name]/route.ts
 // GET /api/tags/[name]
 // Returns tag metadata + stories with this tag.
+//
+// Fix I: params is now a Promise and must be awaited (Next.js 14.2+).
 
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
+  // Fix I — await params
+  const { name } = await params
+
   const supabase = await createClient()
 
   const { data: tag } = await supabase
     .from('tags')
     .select('id, name, use_count')
-    .eq('name', params.name)
+    .eq('name', name)
     .single()
 
   if (!tag) return NextResponse.json({ error: 'Tag not found' }, { status: 404 })

@@ -1,6 +1,8 @@
 // app/api/annotations/highlights/document/[documentId]/route.ts
 // GET — fetch all highlights for the current user on a specific chapter.
 //
+// Fix I: params is now a Promise and must be awaited (Next.js 14.2+).
+//
 // Separated from the [id] routes to avoid Next.js dynamic slug conflicts.
 // Called as: GET /api/annotations/highlights/document/<documentId>
 //
@@ -21,8 +23,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { documentId: string } }
+  { params }: { params: Promise<{ documentId: string }> }
 ) {
+  // Fix I — await params
+  const { documentId } = await params
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -37,7 +42,7 @@ export async function GET(
     .select(
       'id, paragraph_key, start_offset, end_offset, selected_text, color, note, is_public, is_stale'
     )
-    .eq('document_id', params.documentId)
+    .eq('document_id', documentId)
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
 
