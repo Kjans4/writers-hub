@@ -10,14 +10,15 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SignupPage() {
-  const router = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
 
-  const [email, setEmail]       = useState('')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError]       = useState<string | null>(null)
-  const [loading, setLoading]   = useState(false)
+  const [email,           setEmail]           = useState('')
+  const [username,        setUsername]        = useState('')
+  const [password,        setPassword]        = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error,           setError]           = useState<string | null>(null)
+  const [loading,         setLoading]         = useState(false)
 
   // Normalize username: lowercase, strip anything that isn't a-z 0-9 _
   function normalizeUsername(raw: string) {
@@ -32,6 +33,11 @@ export default function SignupPage() {
 
     if (!cleanUsername || cleanUsername.length < 3) {
       setError('Username must be at least 3 characters (letters, numbers, underscores).')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
       return
     }
 
@@ -59,13 +65,12 @@ export default function SignupPage() {
     }
 
     // Insert / update profile row with username
-    // signUp returns a user even when email confirmation is disabled
     if (data.user) {
       await supabase
         .from('profiles')
         .upsert({
-          id: data.user.id,
-          username: cleanUsername,
+          id:           data.user.id,
+          username:     cleanUsername,
           display_name: cleanUsername,
         })
     }
@@ -73,6 +78,10 @@ export default function SignupPage() {
     router.push('/dashboard')
     router.refresh()
   }
+
+  // Live password match indicator — only shown once the user starts typing the confirm field
+  const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
+  const passwordMatch    = confirmPassword.length > 0 && password === confirmPassword
 
   return (
     <div className="min-h-screen bg-[#faf9f7] flex items-center justify-center px-4">
@@ -90,6 +99,8 @@ export default function SignupPage() {
 
         {/* Form */}
         <form onSubmit={handleSignup} className="space-y-4">
+
+          {/* Username */}
           <div>
             <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
               Username
@@ -115,6 +126,7 @@ export default function SignupPage() {
             </p>
           </div>
 
+          {/* Email */}
           <div>
             <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
               Email
@@ -129,6 +141,7 @@ export default function SignupPage() {
             />
           </div>
 
+          {/* Password */}
           <div>
             <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
               Password
@@ -144,6 +157,38 @@ export default function SignupPage() {
             />
           </div>
 
+          {/* Confirm password */}
+          <div>
+            <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
+              Confirm Password
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
+              className={`w-full px-3 py-2.5 bg-white border rounded-lg text-stone-800 text-sm font-['Inter'] placeholder:text-stone-300 focus:outline-none focus:ring-2 transition-all
+                ${passwordMismatch
+                  ? 'border-red-300 focus:ring-red-400/50 focus:border-red-400'
+                  : passwordMatch
+                  ? 'border-emerald-300 focus:ring-emerald-400/50 focus:border-emerald-400'
+                  : 'border-stone-200 focus:ring-amber-400/50 focus:border-amber-400'}
+              `}
+              placeholder="Re-enter your password"
+            />
+            {passwordMismatch && (
+              <p className="text-xs text-red-500 font-['Inter'] mt-1">
+                Passwords do not match.
+              </p>
+            )}
+            {passwordMatch && (
+              <p className="text-xs text-emerald-600 font-['Inter'] mt-1">
+                Passwords match.
+              </p>
+            )}
+          </div>
+
           {error && (
             <p className="text-red-500 text-xs font-['Inter'] bg-red-50 px-3 py-2 rounded-lg">
               {error}
@@ -152,7 +197,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || passwordMismatch}
             className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded-lg font-['Inter'] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
             {loading ? 'Creating account…' : 'Create account'}

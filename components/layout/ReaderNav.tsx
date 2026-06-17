@@ -1,7 +1,7 @@
 // components/layout/ReaderNav.tsx
 // Global navigation bar shown on all reader-facing pages.
 // Links: Home (feed), Write (editor dashboard), Guides, Search (disabled until Chunk 2).
-// Avatar dropdown: profile settings, public profile, sign out.
+// Avatar dropdown: profile, settings, sign out.
 // Unauthenticated users see Login / Sign up instead of avatar.
 
 'use client'
@@ -9,10 +9,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import {
-  BookOpen, Home, PenLine, Search, ChevronDown,
-  User, LogOut, BookMarked, Settings,
-} from 'lucide-react'
+import { BookOpen, Home, PenLine, Search, ChevronDown, User, LogOut, BookMarked } from 'lucide-react'
 
 interface ReaderNavProps {
   user:    { id: string; email?: string } | null
@@ -152,30 +149,7 @@ export default function ReaderNav({ user, profile }: ReaderNavProps) {
 
             {/* Dropdown */}
             {avatarOpen && (
-              <div className="absolute top-full right-0 mt-1 w-52 bg-white border border-stone-200 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-
-                {/* Username label */}
-                {profile?.username && (
-                  <div className="px-4 py-2 border-b border-stone-100 mb-1">
-                    <p className="text-xs text-stone-400 font-['Inter'] truncate">
-                      @{profile.username}
-                    </p>
-                  </div>
-                )}
-
-                {/* Profile settings */}
-                <button
-                  onClick={() => {
-                    setAvatarOpen(false)
-                    router.push('/profile')
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 font-['Inter'] transition-colors"
-                >
-                  <Settings size={13} className="text-stone-400" />
-                  Edit profile
-                </button>
-
-                {/* Public profile link */}
+              <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-stone-200 rounded-xl shadow-xl z-50 overflow-hidden py-1">
                 {profile?.username && (
                   <button
                     onClick={() => {
@@ -185,7 +159,7 @@ export default function ReaderNav({ user, profile }: ReaderNavProps) {
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 font-['Inter'] transition-colors"
                   >
                     <User size={13} className="text-stone-400" />
-                    Public profile
+                    Your profile
                   </button>
                 )}
 
