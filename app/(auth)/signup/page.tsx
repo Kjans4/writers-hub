@@ -1,5 +1,5 @@
 // app/(auth)/signup/page.tsx
-// Sign up page. Creates a new Supabase user with email+password.
+// Sign up page. Creates a new Supabase user with email + password + username.
 // On success → redirects to /dashboard.
 
 'use client'
@@ -13,34 +13,61 @@ export default function SignupPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [loading, setLoading]   = useState(false)
 
-  // Derive a confirm-password mismatch warning in real time
-  // only after the user has started typing in the confirm field.
-  const confirmTouched = confirmPassword.length > 0
-  const passwordsMatch = password === confirmPassword
+  // Normalize username: lowercase, strip anything that isn't a-z 0-9 _
+  function normalizeUsername(raw: string) {
+    return raw.toLowerCase().replace(/[^a-z0-9_]/g, '')
+  }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!passwordsMatch) {
-      setError('Passwords do not match.')
+    const cleanUsername = normalizeUsername(username)
+
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setError('Username must be at least 3 characters (letters, numbers, underscores).')
       return
     }
 
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({ email, password })
+    // Check username uniqueness before creating the auth user
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', cleanUsername)
+      .maybeSingle()
 
-    if (error) {
-      setError(error.message)
+    if (existing) {
+      setError('That username is already taken. Please choose another.')
       setLoading(false)
       return
+    }
+
+    const { data, error: signupError } = await supabase.auth.signUp({ email, password })
+
+    if (signupError) {
+      setError(signupError.message)
+      setLoading(false)
+      return
+    }
+
+    // Insert / update profile row with username
+    // signUp returns a user even when email confirmation is disabled
+    if (data.user) {
+      await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          username: cleanUsername,
+          display_name: cleanUsername,
+        })
     }
 
     router.push('/dashboard')
@@ -63,8 +90,31 @@ export default function SignupPage() {
 
         {/* Form */}
         <form onSubmit={handleSignup} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
+              Username
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-['Inter'] pointer-events-none select-none">
+                @
+              </span>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(normalizeUsername(e.target.value))}
+                required
+                minLength={3}
+                maxLength={30}
+                className="w-full pl-7 pr-3 py-2.5 bg-white border border-stone-200 rounded-lg text-stone-800 text-sm font-['Inter'] placeholder:text-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 transition-all"
+                placeholder="your_username"
+                autoComplete="username"
+              />
+            </div>
+            <p className="text-xs text-stone-400 font-['Inter'] mt-1">
+              Letters, numbers, and underscores only.
+            </p>
+          </div>
 
-          {/* Email */}
           <div>
             <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
               Email
@@ -79,7 +129,6 @@ export default function SignupPage() {
             />
           </div>
 
-          {/* Password */}
           <div>
             <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
               Password
@@ -95,40 +144,6 @@ export default function SignupPage() {
             />
           </div>
 
-          {/* Confirm Password */}
-          <div>
-            <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1.5 font-['Inter']">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              required
-              minLength={6}
-              className={`w-full px-3 py-2.5 bg-white border rounded-lg text-stone-800 text-sm font-['Inter'] placeholder:text-stone-300 focus:outline-none focus:ring-2 transition-all
-                ${confirmTouched && !passwordsMatch
-                  ? 'border-red-300 focus:ring-red-400/50 focus:border-red-400'
-                  : confirmTouched && passwordsMatch
-                  ? 'border-emerald-300 focus:ring-emerald-400/50 focus:border-emerald-400'
-                  : 'border-stone-200 focus:ring-amber-400/50 focus:border-amber-400'
-                }`}
-              placeholder="re-enter your password"
-            />
-            {/* Inline feedback — only shown after typing starts */}
-            {confirmTouched && !passwordsMatch && (
-              <p className="text-xs text-red-400 font-['Inter'] mt-1.5">
-                Passwords don't match.
-              </p>
-            )}
-            {confirmTouched && passwordsMatch && (
-              <p className="text-xs text-emerald-500 font-['Inter'] mt-1.5">
-                Passwords match.
-              </p>
-            )}
-          </div>
-
-          {/* Server / submit error */}
           {error && (
             <p className="text-red-500 text-xs font-['Inter'] bg-red-50 px-3 py-2 rounded-lg">
               {error}
@@ -137,7 +152,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || (confirmTouched && !passwordsMatch)}
+            disabled={loading}
             className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded-lg font-['Inter'] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
             {loading ? 'Creating account…' : 'Create account'}
